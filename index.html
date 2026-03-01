@@ -18,6 +18,8 @@
     /* Prevent iOS callout / selection on long press */
     * { -webkit-touch-callout: none; -webkit-user-select: none; }
     textarea, input { -webkit-user-select: text; }
+    /* iOS safe area — avoid home indicator */
+    #root { padding-bottom: env(safe-area-inset-bottom); }
   </style>
 </head>
 <body>
@@ -318,6 +320,16 @@ function Metronome() {
     });
     ro.observe(rootRef.current);
     return () => ro.disconnect();
+  }, []);
+
+  // Use 100dvh on iOS Safari (excludes browser chrome); fall back to 100vh
+  useEffect(() => {
+    if (!rootRef.current) return;
+    try {
+      rootRef.current.style.height = "100dvh";
+    } catch (e) {
+      rootRef.current.style.height = "100vh";
+    }
   }, []);
   const mobile = winWidth < 640;
   // Which measure to preview in the pattern display (follows timeline hover/click when not playing)
@@ -742,9 +754,10 @@ function Metronome() {
 
   return (
     <div ref={rootRef} style={{
-      minHeight: "100vh", background: C.bg, color: C.text,
+      height: "100vh", background: C.bg, color: C.text,
       fontFamily: "'Courier New', monospace",
       display: "flex", flexDirection: "column", userSelect: "none",
+      overflow: "hidden",
     }}>
 
       {/* ── Header ── */}
@@ -803,13 +816,13 @@ function Metronome() {
       {/* Mobile score drawer overlay */}
       {mobile && showScore && scorePanel}
 
-      <div style={{ display: "flex", flex: 1, overflow: "auto", minHeight: 0, touchAction: "pan-y" }}>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
 
         {/* Desktop score editor */}
         {!mobile && scorePanel}
 
         {/* ── Main panel ── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
 
           {/* Controls bar */}
           <div style={{
@@ -1187,7 +1200,7 @@ function Metronome() {
           </div>
 
           {/* ── Measure grid ── */}
-          <div style={{ flex: 1, overflow: "auto", padding: mobile ? "8px 12px" : "12px 20px", minHeight: 0, touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: mobile ? "8px 12px" : "12px 20px", minHeight: 0, touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 6 }}>MEASURES</div>
             <div style={{
               display: "grid",
