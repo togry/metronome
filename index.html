@@ -311,6 +311,7 @@ function Metronome() {
   const [parseError, setParseError]         = useState("");
   const [flash, setFlash]                   = useState(null);
   const [showScore, setShowScore]           = useState(false); // mobile score drawer
+  const [showHelp, setShowHelp]             = useState(false);
   const [winWidth, setWinWidth]             = useState(800);
   const rootRef = useRef(null);
   useEffect(() => {
@@ -791,6 +792,25 @@ function Metronome() {
             marginLeft: mobile ? 4 : 8,
           }}
         >{theme === "dark" ? "☀" : "🌙"}</button>
+
+        {/* ? help button */}
+        <button
+          onClick={() => setShowHelp(true)}
+          title="Help"
+          style={{
+            background: "transparent",
+            border: `1px solid ${C.border}`,
+            color: C.textDim,
+            borderRadius: "50%",
+            width: 26, height: 26,
+            cursor: "pointer",
+            fontSize: 13,
+            lineHeight: 1,
+            marginLeft: mobile ? 4 : 8,
+            flexShrink: 0,
+          }}
+        >?</button>
+
         <div style={{ marginLeft: "auto", display: "flex", gap: mobile ? 8 : 10, alignItems: "center" }}>
           {[
             { key: "measure", col: C.measure, label: "MEAS" },
@@ -815,6 +835,95 @@ function Metronome() {
 
       {/* Mobile score drawer overlay */}
       {mobile && showScore && scorePanel}
+
+      {/* ── Help modal ── */}
+      {showHelp && (
+        <div
+          onClick={() => setShowHelp(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 200,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: C.bgMid, border: `1px solid ${C.borderHi}`,
+              borderRadius: 8, maxWidth: 560, width: "100%",
+              maxHeight: "85vh", overflowY: "auto",
+              padding: 24,
+              fontFamily: "'Courier New', monospace",
+              color: C.text,
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 15, color: C.gold, letterSpacing: 3, fontWeight: "bold" }}>♩ CONDUCTOR — HELP</div>
+              <button onClick={() => setShowHelp(false)} style={{
+                background: "transparent", border: `1px solid ${C.border}`,
+                color: C.textDim, borderRadius: 4, padding: "4px 10px",
+                cursor: "pointer", fontSize: 13,
+              }}>✕</button>
+            </div>
+            {[
+              { h: "Score Format", body: [
+                "Each line: measure: [mark] N/D (grouping) 1/note=BPM",
+                "All fields except the measure number are optional.",
+                "Bracketed measure number → also becomes rehearsal mark: [12]: 4/4",
+                "Lines starting with # or // are comments. Blank lines ignored.",
+              ]},
+              { h: "Time Signatures", body: [
+                "Standard: 4/4  3/4  6/8  2/2  12/8",
+                "Compound (6/8, 12/8): primary beat = dotted quarter automatically.",
+                "Odd meters: add grouping, e.g.  7/8 (2+2+3)  or  5/8 (2+3)",
+              ]},
+              { h: "Tempo", body: [
+                "Written as 1/note=BPM.  Examples:",
+                "  1/4=120   quarter note = 120 bpm",
+                "  1/4.=60   dotted quarter = 60 bpm (compound meters)",
+                "Tempo carries forward until the next marking.",
+              ]},
+              { h: "Playback Controls", body: [
+                "▶ / ◼  Play and stop.",
+                "COUNT IN  Adds a count-in before playback; choose beats and note value.",
+                "SUBDIVIDE  Primary beats only, or subdivided to 4ths / 8ths / 16ths / 32nds.",
+                "  Sub-clicks are added only where a beat divides evenly.",
+                "TEMPO slider  10–150% of written tempo.",
+                "☀ / 🌙  Toggle between dark and daylight palettes.",
+              ]},
+              { h: "Timeline", body: [
+                "Click (or tap) → set start position.",
+                "Drag (1 finger on touch) → define loop region.",
+                "Shift-click → set loop end independently.",
+                "2-finger drag on touch → scroll timeline horizontally.",
+                "Playhead tracks position during playback; click while playing to jump.",
+              ]},
+              { h: "Measure Grid", body: [
+                "Click any cell to set start position.",
+                "Active measure highlighted in gold. Loop region in orange.",
+                "On mobile, swipe vertically to scroll.",
+              ]},
+              { h: "Fine", body: [
+                "Add  38: Fine  to stop playback at the start of that measure.",
+              ]},
+            ].map(({ h, body }) => (
+              <div key={h} style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 6, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>{h.toUpperCase()}</div>
+                {body.map((line, i) => (
+                  <div key={i} style={{ fontSize: 12, color: line.startsWith(" ") || line.startsWith("  ") ? C.code : C.textDim, lineHeight: 1.7, paddingLeft: line.startsWith(" ") ? 12 : 0 }}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ fontSize: 10, color: C.textFaint, marginTop: 8, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+              Click outside this panel or press ✕ to close.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
 
@@ -889,9 +998,17 @@ function Metronome() {
                 <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>
                   {playing ? "NOW" : "M."}
                 </div>
-                <div style={{ fontSize: 32, color: C.gold, fontWeight: "bold", lineHeight: 1 }}>
-                  {playing ? currentMeasure : previewMeasure}
-                </div>
+                {(() => {
+                  const mn = playing ? currentMeasure : previewMeasure;
+                  const ms = measures[mn];
+                  const sig = ms ? `[${ms.numerator}/${ms.denominator}${ms.grouping ? " " + ms.grouping.join("+") : ""}]` : "";
+                  return (
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, justifyContent: "flex-end" }}>
+                      <span style={{ fontSize: 32, color: C.gold, fontWeight: "bold", lineHeight: 1 }}>{mn}</span>
+                      <span style={{ fontSize: 32, color: C.gold, fontWeight: "bold", lineHeight: 1 }}>{sig}</span>
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const ms = measures[playing ? currentMeasure : previewMeasure];
                   return ms?.rehearsal
@@ -943,21 +1060,23 @@ function Metronome() {
                 <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2 }}>
                   {playing ? "PLAYING" : "MEASURE"}
                 </div>
-                <div style={{ fontSize: 38, color: C.gold, fontWeight: "bold", lineHeight: 1 }}>
-                  {playing ? currentMeasure : previewMeasure}
-                </div>
+                {(() => {
+                  const mn = playing ? currentMeasure : previewMeasure;
+                  const ms = measures[mn];
+                  const sig = ms ? `[${ms.numerator}/${ms.denominator}${ms.grouping ? " " + ms.grouping.join("+") : ""}]` : "";
+                  return (
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end" }}>
+                      <span style={{ fontSize: 38, color: C.gold, fontWeight: "bold", lineHeight: 1 }}>{mn}</span>
+                      <span style={{ fontSize: 38, color: C.gold, fontWeight: "bold", lineHeight: 1 }}>{sig}</span>
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const ms = measures[playing ? currentMeasure : previewMeasure];
                   return ms?.rehearsal
                     ? <div style={{ fontSize: 13, color: "#88aaff", letterSpacing: 2 }}>[{ms.rehearsal}]</div>
                     : null;
                 })()}
-                {previewMs && (
-                  <div style={{ fontSize: 10, color: C.textDim }}>
-                    {previewMs.numerator}/{previewMs.denominator}
-                    {previewMs.grouping ? ` (${previewMs.grouping.join("+")})` : ""}
-                  </div>
-                )}
               </div>
             )}
           </div>
