@@ -31,7 +31,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 function parseScore(text) {
-  const lines = text.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("//"));
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("//") && !l.startsWith("#"));
   const events = [];
   for (const line of lines) {
     // Support both "12: ..." and "[12]: ..." — bracketed measure number becomes a rehearsal mark
@@ -58,12 +58,12 @@ function parseScore(text) {
       event.grouping = grpM[1].split("+").map(Number);
       remaining = remaining.slice(remaining.indexOf(grpM[0]) + grpM[0].length).trim();
     }
-    const tempoM = remaining.match(/1\/(\d+)\s*=\s*(\d+)/);
-    if (tempoM) { event.tempoDenom = parseInt(tempoM[1]); event.tempoBPM = parseInt(tempoM[2]); }
+    const tempoM = remaining.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
+    if (tempoM) { event.tempoDenom = parseInt(tempoM[1]); event.tempoDotted = tempoM[2] === "."; event.tempoBPM = parseInt(tempoM[3]); }
     if (event.rehearsal || event.numerator || event.tempoBPM) events.push(event);
   }
   events.sort((a, b) => a.measure - b.measure);
-  let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoBPM: 120 };
+  let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
   const measures = [];
   let fineAt = Infinity;
   const changes = {};
@@ -74,7 +74,7 @@ function parseScore(text) {
     if (ev.numerator)   changes[ev.measure].numerator   = ev.numerator;
     if (ev.denominator) changes[ev.measure].denominator = ev.denominator;
     if (ev.grouping)    changes[ev.measure].grouping    = ev.grouping;
-    if (ev.tempoBPM)  { changes[ev.measure].tempoDenom  = ev.tempoDenom; changes[ev.measure].tempoBPM = ev.tempoBPM; }
+    if (ev.tempoBPM)  { changes[ev.measure].tempoDenom = ev.tempoDenom; changes[ev.measure].tempoDotted = ev.tempoDotted || false; changes[ev.measure].tempoBPM = ev.tempoBPM; }
   }
   const lastMeasure = fineAt < Infinity ? fineAt : Math.max(...Object.keys(changes).map(Number), 1) + 20;
   for (let mn = 1; mn <= lastMeasure; mn++) {
@@ -85,6 +85,7 @@ function parseScore(text) {
         denominator: c.denominator ?? state.denominator,
         grouping:    c.grouping    ?? (c.numerator ? null : state.grouping),
         tempoDenom:  c.tempoDenom  ?? state.tempoDenom,
+        tempoDotted: c.tempoDotted ?? state.tempoDotted,
         tempoBPM:    c.tempoBPM   ?? state.tempoBPM,
         rehearsal:   c.rehearsal,
       };
@@ -189,8 +190,10 @@ function getBeatPattern(mState, subdivTargetDenom) {
 
 // Seconds per one denominator unit
 function oneDenomUnitSec(mState, tempoScale) {
-  const { tempoBPM, tempoDenom, denominator } = mState;
-  return (tempoDenom / denominator) * (60 / (tempoBPM * tempoScale));
+  const { tempoBPM, tempoDenom, tempoDotted, denominator } = mState;
+  // dotted note tempo: one beat = 1.5 × tempoDenom note-values
+  const dotFactor = tempoDotted ? 1.5 : 1;
+  return (tempoDenom / denominator) * dotFactor * (60 / (tempoBPM * tempoScale));
 }
 
 // ─── Timeline helpers ─────────────────────────────────────────────────────────
@@ -427,8 +430,8 @@ function Metronome() {
       const ciDenom = countInDenomRef.current; // 4 or 8
       const ciBeats = countInBeatsRef.current; // 2,3,4
       // Use the measure's tempo: tempoBPM beats of 1/tempoDenom per minute
-      const { tempoBPM, tempoDenom } = mState;
-      const oneBeatSec = (tempoDenom / ciDenom) * (60 / (tempoBPM * scale));
+      const { tempoBPM, tempoDenom, tempoDotted } = mState;
+      const oneBeatSec = (tempoDenom / ciDenom) * (60 / (tempoBPM * scale)); // count-in uses plain quarters/eighths
 
       const startT = ctx.currentTime + 0.05;
       setCountingIn(true);
