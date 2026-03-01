@@ -573,25 +573,48 @@ function Metronome() {
   }
 
   function handleTimelineTouchStart(e) {
-    e.preventDefault();
+    // Two-finger touch = scroll — don't intercept, let the container pan
+    if (e.touches.length >= 2) {
+      dragStateRef.current = null;
+      return;
+    }
+    // Single finger: record start; decide drag vs tap on move/end
     const touch = e.touches[0];
     const mn = measureFromX(touch.clientX);
-    dragStateRef.current = { anchorMn: mn };
-    setStartMeasure(mn);
-    setPreviewMeasure(mn);
-    setLoopEnd(null);
-    if (isPlayingRef.current) {
-      posRef.current = { measure: mn, tick: 0 };
-      setCurrentMeasure(mn);
-      setCurrentBeat(0);
-    }
+    dragStateRef.current = { anchorMn: mn, startX: touch.clientX, startY: touch.clientY, confirmed: false };
   }
 
   function handleTimelineTouchMove(e) {
-    e.preventDefault();
+    // If a second finger appears mid-gesture, abort the drag and let it scroll
+    if (e.touches.length >= 2) {
+      dragStateRef.current = null;
+      return;
+    }
     if (!dragStateRef.current) return;
     const touch = e.touches[0];
-    const { anchorMn } = dragStateRef.current;
+    const { anchorMn, startX, startY, confirmed } = dragStateRef.current;
+    const dx = Math.abs(touch.clientX - startX);
+    const dy = Math.abs(touch.clientY - startY);
+
+    if (!confirmed) {
+      if (dx < 6 && dy < 6) return;
+      if (dy > dx) {
+        dragStateRef.current = null;
+        return;
+      }
+      // Confirmed horizontal drag — take control
+      dragStateRef.current.confirmed = true;
+      setStartMeasure(anchorMn);
+      setPreviewMeasure(anchorMn);
+      setLoopEnd(null);
+      if (isPlayingRef.current) {
+        posRef.current = { measure: anchorMn, tick: 0 };
+        setCurrentMeasure(anchorMn);
+        setCurrentBeat(0);
+      }
+    }
+
+    e.preventDefault();
     const mn = measureFromX(touch.clientX);
     if (mn !== anchorMn) {
       const lo = Math.min(anchorMn, mn);
@@ -602,7 +625,20 @@ function Metronome() {
     }
   }
 
-  function handleTimelineTouchEnd() {
+  function handleTimelineTouchEnd(e) {
+    if (!dragStateRef.current) return;
+    const { anchorMn, confirmed } = dragStateRef.current;
+    if (!confirmed) {
+      // Short tap — set start position
+      setStartMeasure(anchorMn);
+      setPreviewMeasure(anchorMn);
+      setLoopEnd(null);
+      if (isPlayingRef.current) {
+        posRef.current = { measure: anchorMn, tick: 0 };
+        setCurrentMeasure(anchorMn);
+        setCurrentBeat(0);
+      }
+    }
     dragStateRef.current = null;
   }
 
@@ -767,7 +803,7 @@ function Metronome() {
       {/* Mobile score drawer overlay */}
       {mobile && showScore && scorePanel}
 
-      <div style={{ display: "flex", flex: 1, overflow: "auto", minHeight: 0 }}>
+      <div style={{ display: "flex", flex: 1, overflow: "auto", minHeight: 0, touchAction: "pan-y" }}>
 
         {/* Desktop score editor */}
         {!mobile && scorePanel}
@@ -965,7 +1001,7 @@ function Metronome() {
           <div style={{ padding: mobile ? "8px 12px 4px" : "12px 20px 4px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>
               {mobile
-                ? "TIMELINE · tap = start · drag = loop"
+                ? "TIMELINE · tap = start · 1-finger drag = loop · 2-finger drag = scroll"
                 : "TIMELINE · click = set start · drag = loop · shift-click = set loop end"}
             </div>
 
@@ -977,6 +1013,8 @@ function Metronome() {
                 borderRadius: 4,
                 scrollbarWidth: "thin",
                 scrollbarColor: `${C.borderHi} ${C.bgDark}`,
+                touchAction: "pan-x",
+                WebkitOverflowScrolling: "touch",
               }}
             >
               {/* Inner track — fixed px width, one px per MIN_PX_PER_MEASURE per measure */}
@@ -994,7 +1032,6 @@ function Metronome() {
                   border: `1px solid ${C.border}`,
                   borderRadius: 4,
                   cursor: "crosshair",
-                  touchAction: "none",
                 }}
               >
                 {/* Loop region */}
@@ -1150,7 +1187,7 @@ function Metronome() {
           </div>
 
           {/* ── Measure grid ── */}
-          <div style={{ flex: 1, overflow: "auto", padding: mobile ? "8px 12px" : "12px 20px", minHeight: 0 }}>
+          <div style={{ flex: 1, overflow: "auto", padding: mobile ? "8px 12px" : "12px 20px", minHeight: 0, touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 6 }}>MEASURES</div>
             <div style={{
               display: "grid",

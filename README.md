@@ -59,7 +59,24 @@ For odd meters, specify how beats are grouped within the measure:
 ### Tempo
 
 Written as `1/note=BPM`, e.g. `1/4=120` means quarter note = 120 bpm.
-The tempo stays in effect until the next tempo marking.
+A dotted note value can be written with a period: `1/4.=60` means dotted
+quarter = 60 bpm, the natural way to express compound meter tempos like
+6/8 and 12/8. The tempo stays in effect until the next tempo marking.
+
+### Comments and blank lines
+
+Lines starting with `#` or `//` are treated as comments and ignored.
+Blank lines are also ignored. Use them freely to annotate your score:
+
+```
+# Symphony No. 5 — rehearsal score
+# ♩=120 throughout except [C]
+
+[1]: 4/4, 1/4=120
+
+# Transition
+[17]: 6/8, 1/4.=80
+```
 
 ---
 
@@ -77,6 +94,7 @@ The tempo stays in effect until the next tempo marking.
     (e.g. a group of 3 eighths won't subdivide to quarters)
 - **REHEARSAL TEMPO** — scale the tempo from 10% to 150% of the written speed;
   the actual BPM is shown next to the slider
+- **☀ / 🌙** — toggle between the dark (night) and light (daylight) colour palette
 
 ### Click sounds
 
@@ -89,20 +107,33 @@ The tempo stays in effect until the next tempo marking.
 ### Timeline
 
 The horizontal bar shows the full piece with rehearsal marks and time signature
-changes labelled.
+changes labelled. It scrolls horizontally when the piece is long enough that
+measures would otherwise be too small to interact with.
 
-- **Click** anywhere on the timeline to set the start position
+**Desktop:**
+- **Click** anywhere to set the start position
 - **Drag** to define a loop region (highlighted in orange); playback will
   repeat that section until stopped
 - **Shift-click** to set the loop end point independently
-- The start position and loop end can also be typed in the fields below the timeline
-- The **red playhead** moves in real time during playback; clicking the timeline
-  while playing jumps immediately to that measure
+- The start position and loop end can also be typed in the fields below
+- The **red playhead** moves in real time during playback; clicking while
+  playing jumps immediately to that measure
+
+**Mobile / touchscreen:**
+- **Tap** to set the start position
+- **Single-finger horizontal drag** to define a loop region
+- **Two-finger drag** to scroll the timeline horizontally
 
 ### Measure grid
 
-The grid at the bottom shows every measure. Click any cell to set the start
-position. The currently playing measure is highlighted in gold.
+The grid at the bottom shows every measure. Click or tap any cell to set the
+start position. The currently playing measure is highlighted in gold.
+
+### Mobile use
+
+On small screens the score editor is hidden by default. Tap **SCORE** in the
+header to open it as a full-screen overlay; tap **PARSE SCORE** to apply and
+return. The measures grid scrolls vertically with a normal swipe.
 
 ---
 
