@@ -475,7 +475,9 @@
   <footer>Powered by Gemini · Conductor format · Your key, your usage, no data stored</footer>
 </div>
 
-<script>
+<script type="module">
+import { GoogleGenAI } from 'https://esm.run/@google/genai';
+
 const PROMPT = `You are a specialist in music notation and score analysis. The user has uploaded a PDF of sheet music. Your task is to extract all tempo and time signature changes and output them in the exact Conductor score format described below.
 
 ## Conductor Score Format
@@ -505,61 +507,52 @@ If measure numbers reset between movements, note this with a comment and restart
 If there are rubato, accelerando, or ad lib passages that cannot have a fixed BPM, mark them as a # comment and carry the last known tempo.`;
 
 let pdfBase64 = null;
-let pdfMimeType = 'application/pdf';
 let pdfFileName = '';
 
-const apiKey     = document.getElementById('apiKey');
-const fileInput  = document.getElementById('fileInput');
-const uploadZone = document.getElementById('uploadZone');
-const fileInfo   = document.getElementById('fileInfo');
-const fileName   = document.getElementById('fileName');
-const removeBtn  = document.getElementById('removeBtn');
-const generateBtn= document.getElementById('generateBtn');
-const status     = document.getElementById('status');
-const statusText = document.getElementById('statusText');
+const apiKeyEl    = document.getElementById('apiKey');
+const fileInput   = document.getElementById('fileInput');
+const uploadZone  = document.getElementById('uploadZone');
+const fileInfo    = document.getElementById('fileInfo');
+const fileNameEl  = document.getElementById('fileName');
+const removeBtn   = document.getElementById('removeBtn');
+const generateBtn = document.getElementById('generateBtn');
+const statusEl    = document.getElementById('status');
+const statusText  = document.getElementById('statusText');
 const outputSection = document.getElementById('outputSection');
-const outputPre  = document.getElementById('outputPre');
-const notesBox   = document.getElementById('notesBox');
-const copyBtn    = document.getElementById('copyBtn');
-const downloadBtn= document.getElementById('downloadBtn');
+const outputPre   = document.getElementById('outputPre');
+const notesBox    = document.getElementById('notesBox');
+const copyBtn     = document.getElementById('copyBtn');
+const downloadBtn = document.getElementById('downloadBtn');
 const instructions = document.getElementById('instructions');
 
 function checkReady() {
-  generateBtn.disabled = !(pdfBase64 && apiKey.value.trim());
+  generateBtn.disabled = !(pdfBase64 && apiKeyEl.value.trim());
 }
+apiKeyEl.addEventListener('input', checkReady);
 
-apiKey.addEventListener('input', checkReady);
-
-// Drag and drop
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
 uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  uploadZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file && file.type === 'application/pdf') handleFile(file);
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f?.type === 'application/pdf') handleFile(f);
 });
-
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) handleFile(fileInput.files[0]);
-});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
 
 removeBtn.addEventListener('click', () => {
-  pdfBase64 = null; pdfFileName = '';
-  fileInput.value = '';
+  pdfBase64 = null; pdfFileName = ''; fileInput.value = '';
   fileInfo.classList.remove('visible');
   outputSection.classList.remove('visible');
-  status.classList.remove('visible');
+  statusEl.classList.remove('visible');
   checkReady();
 });
 
 function handleFile(file) {
   pdfFileName = file.name;
-  pdfMimeType = file.type || 'application/pdf';
   const reader = new FileReader();
   reader.onload = e => {
     pdfBase64 = e.target.result.split(',')[1];
-    fileName.textContent = file.name;
+    fileNameEl.textContent = file.name;
     fileInfo.classList.add('visible');
     checkReady();
   };
@@ -569,92 +562,75 @@ function handleFile(file) {
 generateBtn.addEventListener('click', generate);
 
 async function generate() {
-  const key = apiKey.value.trim();
+  const key = apiKeyEl.value.trim();
   if (!pdfBase64 || !key) return;
 
   generateBtn.disabled = true;
   outputSection.classList.remove('visible');
-  status.className = 'status visible thinking';
+  statusEl.className = 'status visible thinking';
   statusText.textContent = 'Sending score to Gemini…';
 
   const userText = instructions.value.trim()
     ? `Please extract the Conductor timesheet from this score.\n\nAdditional instructions: ${instructions.value.trim()}`
     : 'Please extract the Conductor timesheet from this score.';
 
-  // Gemini generateContent endpoint
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-
-  const body = {
-    system_instruction: { parts: [{ text: PROMPT }] },
-    contents: [{
-      role: 'user',
-      parts: [
-        { inline_data: { mime_type: pdfMimeType, data: pdfBase64 } },
-        { text: userText }
-      ]
-    }],
-    generationConfig: { maxOutputTokens: 4000, temperature: 0.1 }
-  };
-
   try {
+    const ai = new GoogleGenAI({ apiKey: key });
+
     statusText.textContent = 'Analysing notation and extracting tempo map…';
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+          { text: userText }
+        ]
+      }],
+      config: {
+        systemInstruction: PROMPT,
+        maxOutputTokens: 4000,
+        temperature: 0.1
+      }
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      const msg = err.error?.message || `API error ${response.status}`;
-      // Friendly hint for auth errors
-      if (response.status === 400 || response.status === 403) {
-        throw new Error(msg + ' — check your API key');
-      }
-      throw new Error(msg);
-    }
-
-    const data = await response.json();
-    let text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-    text = text.trim();
+    let text = response.text?.trim() ?? '';
 
     // Strip any accidental markdown fences
-    text = text.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
+    text = text.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/,'').trim();
 
-    // Split off trailing prose notes
-    let timesheet = text;
-    let notes = '';
+    // Split off any trailing prose notes
+    let timesheet = text, notes = '';
     const noteMatch = text.match(/\n(Note[s]?:.+)$/s);
-    if (noteMatch) {
-      timesheet = text.slice(0, noteMatch.index).trim();
-      notes = noteMatch[1];
-    }
+    if (noteMatch) { timesheet = text.slice(0, noteMatch.index).trim(); notes = noteMatch[1]; }
 
     outputPre._rawText = timesheet;
     outputPre.textContent = timesheet;
     highlightOutput();
 
-    if (notes) {
-      notesBox.innerHTML = '<strong>Notes:</strong> ' + escHtml(notes.replace(/^Notes?:\s*/i, ''));
-      notesBox.style.display = 'block';
-    } else {
-      notesBox.style.display = 'none';
-    }
+    notesBox.style.display = notes ? 'block' : 'none';
+    if (notes) notesBox.innerHTML = '<strong>Notes:</strong> ' + escHtml(notes.replace(/^Notes?:\s*/i,''));
 
-    status.classList.remove('visible');
+    statusEl.classList.remove('visible');
     outputSection.classList.add('visible');
 
   } catch (err) {
-    status.className = 'status visible error';
-    statusText.textContent = '✕ ' + err.message;
+    statusEl.className = 'status visible error';
+    // Friendlier messages for common problems
+    const msg = err.message || String(err);
+    if (msg.includes('API_KEY') || msg.includes('403') || msg.includes('401')) {
+      statusText.textContent = '✕ Invalid API key — check your Google AI Studio key';
+    } else {
+      statusText.textContent = '✕ ' + msg;
+    }
   }
 
   checkReady();
 }
 
 function highlightOutput() {
-  const raw = outputPre.textContent;
-  const lines = raw.split('\n').map(line => {
+  const lines = outputPre.textContent.split('\n').map(line => {
     if (line.startsWith('#')) return `<span class="comment">${escHtml(line)}</span>`;
     return escHtml(line)
       .replace(/^(\[?\d+\]?:)/, '<span class="measure">$1</span>')
@@ -669,21 +645,17 @@ function escHtml(s) {
 }
 
 copyBtn.addEventListener('click', () => {
-  const text = outputPre._rawText || outputPre.textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    copyBtn.textContent = 'Copied ✓';
-    copyBtn.classList.add('copied');
+  navigator.clipboard.writeText(outputPre._rawText || outputPre.textContent).then(() => {
+    copyBtn.textContent = 'Copied ✓'; copyBtn.classList.add('copied');
     setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 2000);
   });
 });
 
 downloadBtn.addEventListener('click', () => {
-  const text = outputPre._rawText || outputPre.textContent;
-  const base = pdfFileName.replace(/\.pdf$/i, '');
-  const blob = new Blob([text], { type: 'text/plain' });
+  const blob = new Blob([outputPre._rawText || outputPre.textContent], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = base + '_conductor.txt';
+  a.download = pdfFileName.replace(/\.pdf$/i,'') + '_conductor.txt';
   a.click();
 });
 </script>
