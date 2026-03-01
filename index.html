@@ -234,28 +234,51 @@ const SUBDIV_OPTIONS = [
   { label: "Subdivided to 32nds",targetDenom: 32 },
 ];
 
-// ─── Colors ───────────────────────────────────────────────────────────────────
+// ─── Color palettes ───────────────────────────────────────────────────────────
 
-const C = {
-  bg:         "#0d0d16",
-  bgMid:      "#111120",
-  bgDark:     "#080810",
-  border:     "#252540",
-  borderHi:   "#3a3a60",
-  measure:    "#ff3333",   // bright red
-  primary:    "#ffaa00",   // bright amber
-  unit:       "#00ccff",   // bright cyan
-  sub:        "#7777aa",   // muted purple
-  gold:       "#f0c040",
-  green:      "#44ee88",
-  greenDim:   "#224433",
-  red:        "#ee4444",
-  redDim:     "#331111",
-  orange:     "#ee9900",
-  text:       "#e8e4f8",
-  textDim:    "#7070a0",
-  textFaint:  "#404060",
-  code:       "#88ffbb",
+const PALETTES = {
+  dark: {
+    bg:         "#0d0d16",
+    bgMid:      "#111120",
+    bgDark:     "#080810",
+    border:     "#252540",
+    borderHi:   "#3a3a60",
+    measure:    "#ff3333",
+    primary:    "#ffaa00",
+    unit:       "#00ccff",
+    sub:        "#7777aa",
+    gold:       "#f0c040",
+    green:      "#44ee88",
+    greenDim:   "#224433",
+    red:        "#ee4444",
+    redDim:     "#331111",
+    orange:     "#ee9900",
+    text:       "#e8e4f8",
+    textDim:    "#7070a0",
+    textFaint:  "#404060",
+    code:       "#007755",
+  },
+  light: {
+    bg:         "#f5f0e8",
+    bgMid:      "#ece6d8",
+    bgDark:     "#ddd6c4",
+    border:     "#c0b8a8",
+    borderHi:   "#a09080",
+    measure:    "#cc1111",
+    primary:    "#b06000",
+    unit:       "#006699",
+    sub:        "#8866aa",
+    gold:       "#8a6000",
+    green:      "#006633",
+    greenDim:   "#cce8d8",
+    red:        "#cc2222",
+    redDim:     "#f8dada",
+    orange:     "#cc6600",
+    text:       "#1a1408",
+    textDim:    "#5a4e38",
+    textFaint:  "#9a8e78",
+    code:       "#005533",
+  },
 };
 
 // ─── Default score ────────────────────────────────────────────────────────────
@@ -272,6 +295,8 @@ const DEFAULT_SCORE = `1: 4/4, 1/4=90
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 function Metronome() {
+  const [theme, setTheme]                   = useState("dark");
+  const C = PALETTES[theme];
   const [scoreText, setScoreText]           = useState(DEFAULT_SCORE);
   const [parsed, setParsed]                 = useState(() => parseScore(DEFAULT_SCORE));
   const [playing, setPlaying]               = useState(false);
@@ -284,11 +309,15 @@ function Metronome() {
   const [parseError, setParseError]         = useState("");
   const [flash, setFlash]                   = useState(null);
   const [showScore, setShowScore]           = useState(false); // mobile score drawer
-  const [winWidth, setWinWidth]             = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [winWidth, setWinWidth]             = useState(800);
+  const rootRef = useRef(null);
   useEffect(() => {
-    const onResize = () => setWinWidth(window.innerWidth);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    if (!rootRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setWinWidth(e.contentRect.width);
+    });
+    ro.observe(rootRef.current);
+    return () => ro.disconnect();
   }, []);
   const mobile = winWidth < 640;
   // Which measure to preview in the pattern display (follows timeline hover/click when not playing)
@@ -676,11 +705,10 @@ function Metronome() {
   );
 
   return (
-    <div style={{
-      height: "100vh", background: C.bg, color: C.text,
+    <div ref={rootRef} style={{
+      minHeight: "100vh", background: C.bg, color: C.text,
       fontFamily: "'Courier New', monospace",
       display: "flex", flexDirection: "column", userSelect: "none",
-      overflow: "hidden", touchAction: "none",
     }}>
 
       {/* ── Header ── */}
@@ -699,6 +727,21 @@ function Metronome() {
         )}
         <div style={{ fontSize: mobile ? 14 : 17, letterSpacing: 4, color: C.gold, fontWeight: "bold" }}>♩ CONDUCTOR</div>
         {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>SCORE-AWARE METRONOME</div>}
+        <button
+          onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+          title={theme === "dark" ? "Switch to daylight palette" : "Switch to night palette"}
+          style={{
+            background: "transparent",
+            border: `1px solid ${C.border}`,
+            color: C.textDim,
+            borderRadius: 4,
+            padding: "4px 8px",
+            cursor: "pointer",
+            fontSize: 14,
+            lineHeight: 1,
+            marginLeft: mobile ? 4 : 8,
+          }}
+        >{theme === "dark" ? "☀" : "🌙"}</button>
         <div style={{ marginLeft: "auto", display: "flex", gap: mobile ? 8 : 10, alignItems: "center" }}>
           {[
             { key: "measure", col: C.measure, label: "MEAS" },
@@ -724,7 +767,7 @@ function Metronome() {
       {/* Mobile score drawer overlay */}
       {mobile && showScore && scorePanel}
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
+      <div style={{ display: "flex", flex: 1, overflow: "auto", minHeight: 0 }}>
 
         {/* Desktop score editor */}
         {!mobile && scorePanel}
