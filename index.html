@@ -311,7 +311,8 @@ function Metronome() {
   const startMeasureRef  = useRef(startMeasure);        startMeasureRef.current = startMeasure;
   const loopEndRef       = useRef(loopEnd);             loopEndRef.current = loopEnd;
 
-  const timelineRef     = useRef(null);
+  const timelineRef       = useRef(null);   // inner content
+  const timelineScrollRef = useRef(null);   // scroll container
   const dragStateRef        = useRef(null);
   const skipPlayEffectRef   = useRef(false);
   const countInEnabledRef = useRef(countInEnabled); countInEnabledRef.current = countInEnabled;
@@ -493,11 +494,16 @@ function Metronome() {
 
   const { measures, fineAt } = parsed;
   const totalMeasures = fineAt < Infinity ? fineAt : Object.values(measures).filter(Boolean).length;
+  const MIN_PX_PER_MEASURE = 22;
+  const timelineContentWidth = Math.max(totalMeasures * MIN_PX_PER_MEASURE, 200);
+  const measPx = (mn) => Math.round(((mn - 1) / Math.max(1, totalMeasures - 1)) * (timelineContentWidth - 1));
   const measPct = (mn) => ((mn - 1) / Math.max(1, totalMeasures - 1)) * 100;
 
   function measureFromX(x) {
-    const rect = timelineRef.current.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    const scrollEl = timelineScrollRef.current;
+    const rect = scrollEl.getBoundingClientRect();
+    const px = (x - rect.left) + scrollEl.scrollLeft;
+    const frac = Math.max(0, Math.min(1, px / Math.max(1, timelineContentWidth - 1)));
     return Math.max(1, Math.min(totalMeasures, Math.round(frac * (totalMeasures - 1)) + 1));
   }
 
@@ -579,6 +585,19 @@ function Metronome() {
       window.removeEventListener("mouseup", handleTimelineMouseUp);
     };
   }, [playing, startMeasure]);
+
+  // Auto-scroll timeline to keep playhead / start marker in view
+  useEffect(() => {
+    const scrollEl = timelineScrollRef.current;
+    if (!scrollEl) return;
+    const targetMn = playing ? currentMeasure : startMeasure;
+    const px = measPx(targetMn);
+    const vw = scrollEl.clientWidth;
+    const sl = scrollEl.scrollLeft;
+    const margin = Math.max(40, vw * 0.2);
+    if (px < sl + margin)          scrollEl.scrollLeft = Math.max(0, px - margin);
+    else if (px > sl + vw - margin) scrollEl.scrollLeft = px - vw + margin;
+  }, [currentMeasure, startMeasure, playing]);
 
   // ── Derived display ───────────────────────────────────────────────────────
 
@@ -900,116 +919,145 @@ function Metronome() {
           </div>
 
           {/* ── Timeline ── */}
-          <div style={{ padding: mobile ? "10px 12px 6px" : "14px 20px 10px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-            {!mobile && (
-              <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 8 }}>
-                TIMELINE · click = set start · drag = loop · shift-click = set loop end
-              </div>
-            )}
-            {mobile && (
-              <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>
-                TIMELINE · tap = start · drag = loop
-              </div>
-            )}
+          <div style={{ padding: mobile ? "8px 12px 4px" : "12px 20px 4px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>
+              {mobile
+                ? "TIMELINE · tap = start · drag = loop"
+                : "TIMELINE · click = set start · drag = loop · shift-click = set loop end"}
+            </div>
+
+            {/* Outer scroll container */}
             <div
-              ref={timelineRef}
-              onMouseDown={handleTimelineMouseDown}
-              onTouchStart={handleTimelineTouchStart}
-              onTouchMove={handleTimelineTouchMove}
-              onTouchEnd={handleTimelineTouchEnd}
+              ref={timelineScrollRef}
               style={{
-                position: "relative", height: mobile ? 52 : 58,
-                background: C.bgDark, border: `1px solid ${C.border}`,
-                borderRadius: 4, cursor: "crosshair", overflow: "visible",
-                touchAction: "none",
+                overflowX: "auto", overflowY: "visible",
+                borderRadius: 4,
+                scrollbarWidth: "thin",
+                scrollbarColor: `${C.borderHi} ${C.bgDark}`,
               }}
             >
-              {loopEnd !== null && (
-                <div style={{
-                  position: "absolute",
-                  left: `${measPct(startMeasure)}%`,
-                  width: `${Math.max(0, measPct(loopEnd) - measPct(startMeasure))}%`,
-                  top: 0, bottom: 0,
-                  background: `${C.orange}20`,
-                  borderLeft: `2px solid ${C.orange}`,
-                  borderRight: `2px solid ${C.orange}`,
-                  pointerEvents: "none",
-                }} />
-              )}
-              {Array.from({ length: totalMeasures }, (_, i) => i + 1).map(mn => {
-                const step = totalMeasures > 80 ? 10 : totalMeasures > 40 ? 5 : totalMeasures > 20 ? 2 : 1;
-                if (mn % step !== 0 && mn !== 1) return null;
-                return (
-                  <div key={mn} style={{
-                    position: "absolute", left: `${measPct(mn)}%`,
-                    bottom: 0, height: 6, width: 1, background: C.textFaint, pointerEvents: "none",
+              {/* Inner track — fixed px width, one px per MIN_PX_PER_MEASURE per measure */}
+              <div
+                ref={timelineRef}
+                onMouseDown={handleTimelineMouseDown}
+                onTouchStart={handleTimelineTouchStart}
+                onTouchMove={handleTimelineTouchMove}
+                onTouchEnd={handleTimelineTouchEnd}
+                style={{
+                  position: "relative",
+                  width: timelineContentWidth,
+                  height: mobile ? 52 : 60,
+                  background: C.bgDark,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 4,
+                  cursor: "crosshair",
+                  touchAction: "none",
+                }}
+              >
+                {/* Loop region */}
+                {loopEnd !== null && (
+                  <div style={{
+                    position: "absolute",
+                    left: measPx(startMeasure),
+                    width: Math.max(0, measPx(loopEnd) - measPx(startMeasure)),
+                    top: 0, bottom: 0,
+                    background: `${C.orange}20`,
+                    borderLeft: `2px solid ${C.orange}`,
+                    borderRight: `2px solid ${C.orange}`,
+                    pointerEvents: "none",
+                  }} />
+                )}
+
+                {/* Measure ticks — every measure gets a tick; labels thin out when crowded */}
+                {Array.from({ length: totalMeasures }, (_, i) => i + 1).map(mn => {
+                  const pxPerM = timelineContentWidth / Math.max(1, totalMeasures);
+                  const labelStep = pxPerM < 30 ? Math.ceil(30 / pxPerM) : 1;
+                  const showLabel = mn === 1 || mn % labelStep === 0;
+                  return (
+                    <div key={mn} style={{
+                      position: "absolute", left: measPx(mn),
+                      bottom: 0, height: showLabel ? 8 : 4, width: 1,
+                      background: showLabel ? C.textDim : C.textFaint,
+                      pointerEvents: "none",
+                    }}>
+                      {showLabel && (
+                        <div style={{
+                          position: "absolute", bottom: -14, left: "50%",
+                          transform: "translateX(-50%)",
+                          fontSize: 8, color: C.textFaint, whiteSpace: "nowrap",
+                        }}>{mn}</div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Timeline events: rehearsal marks, time sig changes, Fine */}
+                {timelineEvents.map((ev, idx) => {
+                  const px = measPx(ev.measure);
+                  const isReh = !!ev.rehearsal;
+                  return (
+                    <div key={idx} style={{ position: "absolute", left: px, top: 0, bottom: 0, pointerEvents: "none" }}>
+                      <div style={{
+                        position: "absolute", left: 0, top: 0, bottom: 0,
+                        width: isReh ? 2 : 1,
+                        background: ev.isFine ? C.measure : isReh ? "#88aaff" : C.borderHi,
+                      }} />
+                      <div style={{
+                        position: "absolute", top: 3, left: 4,
+                        fontSize: mobile ? 8 : 9, lineHeight: 1.5, whiteSpace: "nowrap",
+                        color: ev.isFine ? C.measure : isReh ? "#aabbff" : C.textDim,
+                      }}>
+                        {isReh && <div style={{ fontWeight: "bold", fontSize: mobile ? 9 : 10, color: "#aaccff" }}>[{ev.rehearsal}]</div>}
+                        <div>{ev.numerator}/{ev.denominator}{ev.grouping ? ` (${ev.grouping.join("+")})` : ""}</div>
+                        {ev.isFine && <div style={{ color: C.measure }}>Fine</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Playhead */}
+                {playing && (
+                  <div style={{
+                    position: "absolute", left: measPx(currentMeasure),
+                    top: -4, bottom: -4, width: 2,
+                    background: C.measure, boxShadow: `0 0 8px ${C.measure}`,
+                    pointerEvents: "none",
                   }}>
                     <div style={{
-                      position: "absolute", bottom: -13, left: "50%",
-                      transform: "translateX(-50%)",
-                      fontSize: 8, color: C.textFaint, whiteSpace: "nowrap",
-                    }}>{mn}</div>
-                  </div>
-                );
-              })}
-              {timelineEvents.map((ev, idx) => {
-                const pct = measPct(ev.measure);
-                const isReh = !!ev.rehearsal;
-                return (
-                  <div key={idx} style={{ position: "absolute", left: `${pct}%`, top: 0, bottom: 0, pointerEvents: "none" }}>
-                    <div style={{
-                      position: "absolute", left: 0, top: 0, bottom: 0,
-                      width: isReh ? 2 : 1,
-                      background: ev.isFine ? C.measure : isReh ? "#88aaff" : C.borderHi,
+                      position: "absolute", top: 0, left: -4,
+                      width: 0, height: 0,
+                      borderLeft: "5px solid transparent",
+                      borderRight: "5px solid transparent",
+                      borderTop: `8px solid ${C.measure}`,
                     }} />
-                    <div style={{
-                      position: "absolute", top: 3, left: 4,
-                      fontSize: mobile ? 8 : 9, lineHeight: 1.5, whiteSpace: "nowrap",
-                      color: ev.isFine ? C.measure : isReh ? "#aabbff" : C.textDim,
-                    }}>
-                      {isReh && <div style={{ fontWeight: "bold", fontSize: mobile ? 9 : 10, color: "#aaccff" }}>[{ev.rehearsal}]</div>}
-                      <div>{ev.numerator}/{ev.denominator}{ev.grouping ? ` (${ev.grouping.join("+")})` : ""}</div>
-                      {ev.isFine && <div style={{ color: C.measure }}>Fine</div>}
-                    </div>
                   </div>
-                );
-              })}
-              {playing && (
+                )}
+
+                {/* Start / loop-start marker */}
                 <div style={{
-                  position: "absolute", left: `${measPct(currentMeasure)}%`,
-                  top: -4, bottom: -4, width: 2,
-                  background: C.measure, boxShadow: `0 0 8px ${C.measure}`,
-                  pointerEvents: "none", transition: "left 0.05s linear",
+                  position: "absolute", left: measPx(startMeasure),
+                  top: -4, bottom: 0, width: 2,
+                  background: loopEnd !== null ? C.orange : C.green,
+                  pointerEvents: "none",
                 }}>
                   <div style={{
                     position: "absolute", top: 0, left: -4,
                     width: 0, height: 0,
                     borderLeft: "5px solid transparent",
                     borderRight: "5px solid transparent",
-                    borderTop: `8px solid ${C.measure}`,
+                    borderTop: `8px solid ${loopEnd !== null ? C.orange : C.green}`,
                   }} />
                 </div>
-              )}
-              <div style={{
-                position: "absolute", left: `${measPct(startMeasure)}%`,
-                top: -4, bottom: 0, width: 2,
-                background: loopEnd !== null ? C.orange : C.green,
-                pointerEvents: "none",
-              }}>
-                <div style={{
-                  position: "absolute", top: 0, left: -4,
-                  width: 0, height: 0,
-                  borderLeft: "5px solid transparent",
-                  borderRight: "5px solid transparent",
-                  borderTop: `8px solid ${loopEnd !== null ? C.orange : C.green}`,
-                }} />
               </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18, padding: "0 2px" }}>
+
+            {/* Ruler end labels */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, padding: "0 2px" }}>
               <span style={{ fontSize: 9, color: C.textFaint }}>m.1</span>
               <span style={{ fontSize: 9, color: C.textFaint }}>m.{totalMeasures}</span>
             </div>
           </div>
+
 
           {/* ── Start/loop inputs ── */}
           <div style={{
