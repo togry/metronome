@@ -359,6 +359,46 @@
   }
   .notes-box strong { color: var(--ink); }
 
+  /* API key field */
+  .key-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .key-input {
+    flex: 1;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--ink);
+    background: rgba(255,255,255,0.6);
+    border: 1px solid var(--staff);
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s;
+    letter-spacing: 0.04em;
+  }
+  .key-input:focus { border-color: var(--gold); }
+  .key-input::placeholder { color: var(--staff); letter-spacing: 0; }
+
+  .key-link {
+    font-size: 0.8rem;
+    color: var(--gold);
+    text-decoration: none;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+    border-bottom: 1px dashed var(--gold);
+    padding-bottom: 1px;
+  }
+  .key-link:hover { color: var(--gold-light); }
+
+  .key-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 6px;
+    font-style: italic;
+  }
+
   footer {
     text-align: center;
     margin-top: 64px;
@@ -379,6 +419,16 @@
   </header>
 
   <div class="divider"><div class="divider-dot"></div></div>
+
+  <!-- API Key -->
+  <label class="field-label">Google AI Studio API Key</label>
+  <div class="key-row">
+    <input type="password" class="key-input" id="apiKey" placeholder="AIza..." autocomplete="off" spellcheck="false" />
+    <a class="key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get free key ↗</a>
+  </div>
+  <p class="key-note">Your key is used directly from your browser and never sent anywhere except Google's API.</p>
+
+  <div style="margin-top: 28px;"></div>
 
   <!-- Upload -->
   <label class="field-label">Score PDF</label>
@@ -422,11 +472,11 @@
     <div class="notes-box" id="notesBox" style="display:none"></div>
   </div>
 
-  <footer>Powered by Claude · Conductor format · No data stored</footer>
+  <footer>Powered by Gemini · Conductor format · Your key, your usage, no data stored</footer>
 </div>
 
 <script>
-const SYSTEM_PROMPT = `You are a specialist in music notation and score analysis. The user will upload a PDF of sheet music. Your task is to extract all tempo and time signature changes and output them in the exact Conductor score format described below.
+const PROMPT = `You are a specialist in music notation and score analysis. The user has uploaded a PDF of sheet music. Your task is to extract all tempo and time signature changes and output them in the exact Conductor score format described below.
 
 ## Conductor Score Format
 
@@ -440,37 +490,45 @@ Rules:
 - Tempo carries over until the next marking
 - Time signature carries over until the next change
 - Use \`Fine\` on the measure AFTER the last bar to stop playback
-- For compound meters (6/8, 9/8, 12/8) the primary beat is the dotted quarter automatically — write tempo as \`1/4.=BPM\`
+- For compound meters (6/8, 9/8, 12/8) the primary beat is the dotted quarter — write tempo as \`1/4.=BPM\`
 - For alla breve / cut time use \`2/2\` with \`1/2=BPM\`
 - For odd meters specify grouping: \`7/8 (2+2+3)\`, \`5/8 (2+3)\`, \`8/8 (3+3+2)\`
-- Rehearsal letters/numbers from the score should appear as e.g. \`[A]\` or \`[12]\`
+- Rehearsal letters/numbers from the score appear as e.g. \`[A]\` or \`[12]\`
 - Comment lines start with \`#\`
 
 ## Output format
 
-Return ONLY the timesheet text, nothing else. Start with comment lines giving the piece title, composer, and instrument. Then the measures. Use \`#\` comments to label movements and sections. Do not include any explanation or markdown — just the raw timesheet text.
+Return ONLY the timesheet text, with no markdown fences or explanation. Start with # comment lines for title, composer, instrument. Use # comments to label movements and sections.
 
 If measure numbers reset between movements, note this with a comment and restart from 1.
 
-If there are rubato, accelerando, or ad lib passages that cannot have a fixed BPM, include them as a comment line and use the last known tempo.`;
+If there are rubato, accelerando, or ad lib passages that cannot have a fixed BPM, mark them as a # comment and carry the last known tempo.`;
 
 let pdfBase64 = null;
+let pdfMimeType = 'application/pdf';
 let pdfFileName = '';
 
-const fileInput = document.getElementById('fileInput');
+const apiKey     = document.getElementById('apiKey');
+const fileInput  = document.getElementById('fileInput');
 const uploadZone = document.getElementById('uploadZone');
-const fileInfo = document.getElementById('fileInfo');
-const fileName = document.getElementById('fileName');
-const removeBtn = document.getElementById('removeBtn');
-const generateBtn = document.getElementById('generateBtn');
-const status = document.getElementById('status');
+const fileInfo   = document.getElementById('fileInfo');
+const fileName   = document.getElementById('fileName');
+const removeBtn  = document.getElementById('removeBtn');
+const generateBtn= document.getElementById('generateBtn');
+const status     = document.getElementById('status');
 const statusText = document.getElementById('statusText');
 const outputSection = document.getElementById('outputSection');
-const outputPre = document.getElementById('outputPre');
-const notesBox = document.getElementById('notesBox');
-const copyBtn = document.getElementById('copyBtn');
-const downloadBtn = document.getElementById('downloadBtn');
+const outputPre  = document.getElementById('outputPre');
+const notesBox   = document.getElementById('notesBox');
+const copyBtn    = document.getElementById('copyBtn');
+const downloadBtn= document.getElementById('downloadBtn');
 const instructions = document.getElementById('instructions');
+
+function checkReady() {
+  generateBtn.disabled = !(pdfBase64 && apiKey.value.trim());
+}
+
+apiKey.addEventListener('input', checkReady);
 
 // Drag and drop
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
@@ -487,23 +545,23 @@ fileInput.addEventListener('change', () => {
 });
 
 removeBtn.addEventListener('click', () => {
-  pdfBase64 = null;
-  pdfFileName = '';
+  pdfBase64 = null; pdfFileName = '';
   fileInput.value = '';
   fileInfo.classList.remove('visible');
-  generateBtn.disabled = true;
   outputSection.classList.remove('visible');
   status.classList.remove('visible');
+  checkReady();
 });
 
 function handleFile(file) {
   pdfFileName = file.name;
+  pdfMimeType = file.type || 'application/pdf';
   const reader = new FileReader();
   reader.onload = e => {
     pdfBase64 = e.target.result.split(',')[1];
     fileName.textContent = file.name;
     fileInfo.classList.add('visible');
-    generateBtn.disabled = false;
+    checkReady();
   };
   reader.readAsDataURL(file);
 }
@@ -511,49 +569,59 @@ function handleFile(file) {
 generateBtn.addEventListener('click', generate);
 
 async function generate() {
-  if (!pdfBase64) return;
+  const key = apiKey.value.trim();
+  if (!pdfBase64 || !key) return;
 
   generateBtn.disabled = true;
   outputSection.classList.remove('visible');
   status.className = 'status visible thinking';
-  statusText.textContent = 'Sending score to Claude…';
+  statusText.textContent = 'Sending score to Gemini…';
 
-  const userContent = [
-    {
-      type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 }
-    },
-    {
-      type: 'text',
-      text: instructions.value.trim()
-        ? `Please extract the Conductor timesheet from this score.\n\nAdditional instructions: ${instructions.value.trim()}`
-        : 'Please extract the Conductor timesheet from this score.'
-    }
-  ];
+  const userText = instructions.value.trim()
+    ? `Please extract the Conductor timesheet from this score.\n\nAdditional instructions: ${instructions.value.trim()}`
+    : 'Please extract the Conductor timesheet from this score.';
+
+  // Gemini generateContent endpoint
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+
+  const body = {
+    system_instruction: { parts: [{ text: PROMPT }] },
+    contents: [{
+      role: 'user',
+      parts: [
+        { inline_data: { mime_type: pdfMimeType, data: pdfBase64 } },
+        { text: userText }
+      ]
+    }],
+    generationConfig: { maxOutputTokens: 4000, temperature: 0.1 }
+  };
 
   try {
     statusText.textContent = 'Analysing notation and extracting tempo map…';
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userContent }]
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error?.message || `API error ${response.status}`);
+      const msg = err.error?.message || `API error ${response.status}`;
+      // Friendly hint for auth errors
+      if (response.status === 400 || response.status === 403) {
+        throw new Error(msg + ' — check your API key');
+      }
+      throw new Error(msg);
     }
 
     const data = await response.json();
-    const text = data.content.map(b => b.text || '').join('').trim();
+    let text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+    text = text.trim();
 
-    // Split off any trailing prose notes Claude might have added
-    // (everything after a line starting with "Note:" or "Notes:")
+    // Strip any accidental markdown fences
+    text = text.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
+
+    // Split off trailing prose notes
     let timesheet = text;
     let notes = '';
     const noteMatch = text.match(/\n(Note[s]?:.+)$/s);
@@ -562,11 +630,12 @@ async function generate() {
       notes = noteMatch[1];
     }
 
+    outputPre._rawText = timesheet;
     outputPre.textContent = timesheet;
     highlightOutput();
 
     if (notes) {
-      notesBox.innerHTML = '<strong>Notes:</strong> ' + notes.replace(/^Notes?:\s*/i, '');
+      notesBox.innerHTML = '<strong>Notes:</strong> ' + escHtml(notes.replace(/^Notes?:\s*/i, ''));
       notesBox.style.display = 'block';
     } else {
       notesBox.style.display = 'none';
@@ -575,25 +644,18 @@ async function generate() {
     status.classList.remove('visible');
     outputSection.classList.add('visible');
 
-    // Store for download
-    outputPre._rawText = timesheet;
-
   } catch (err) {
     status.className = 'status visible error';
     statusText.textContent = '✕ ' + err.message;
   }
 
-  generateBtn.disabled = false;
+  checkReady();
 }
 
 function highlightOutput() {
-  // Simple syntax highlight by replacing text with spans
   const raw = outputPre.textContent;
   const lines = raw.split('\n').map(line => {
-    if (line.startsWith('#')) {
-      return `<span class="comment">${escHtml(line)}</span>`;
-    }
-    // Highlight measure numbers, time sigs, tempos
+    if (line.startsWith('#')) return `<span class="comment">${escHtml(line)}</span>`;
     return escHtml(line)
       .replace(/^(\[?\d+\]?:)/, '<span class="measure">$1</span>')
       .replace(/(\d+\/\d+)/, '<span class="timesig">$1</span>')
