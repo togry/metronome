@@ -337,11 +337,12 @@ function Metronome() {
   const [showScore, setShowScore]           = useState(false); // mobile score drawer
   const [showHelp, setShowHelp]             = useState(false);
   const [winWidth, setWinWidth]             = useState(800);
+  const [winHeight, setWinHeight]           = useState(600);
   const rootRef = useRef(null);
   useEffect(() => {
     if (!rootRef.current) return;
     const ro = new ResizeObserver(entries => {
-      for (const e of entries) setWinWidth(e.contentRect.width);
+      for (const e of entries) { setWinWidth(e.contentRect.width); setWinHeight(e.contentRect.height); }
     });
     ro.observe(rootRef.current);
     return () => ro.disconnect();
@@ -357,6 +358,7 @@ function Metronome() {
     }
   }, []);
   const mobile = winWidth < 640;
+  const portrait = mobile && winHeight > winWidth;
   // Which measure to preview in the pattern display (follows timeline hover/click when not playing)
   const [previewMeasure, setPreviewMeasure] = useState(1);
   // Count-in settings
@@ -1136,6 +1138,7 @@ function Metronome() {
             alignItems: "flex-end", flexWrap: "wrap",
             background: C.bgMid, flexShrink: 0,
             ...(mobile ? {} : { paddingTop: 8 }),
+            ...(portrait ? { overflowY: "auto", maxHeight: "38vh", WebkitOverflowScrolling: "touch" } : {}),
           }}>
             {/* Subdivision */}
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -1164,7 +1167,7 @@ function Metronome() {
             </div>
 
             {/* Bluetooth latency offset */}
-            {btLatency > 0 || mobile ? (
+            {btLatency > 0 || (!portrait) ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                 <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>
                   BT OFFSET <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span>
@@ -1175,7 +1178,7 @@ function Metronome() {
                 />
               </div>
             ) : (
-              <button onClick={() => setBtLatency(50)}
+              <button onClick={() => setBtLatency(10)}
                 style={{ background: "transparent", border: `1px solid ${C.border}`,
                   color: C.textFaint, borderRadius: 3, padding: "3px 7px",
                   cursor: "pointer", fontSize: 9, letterSpacing: 1, alignSelf: "flex-end",
