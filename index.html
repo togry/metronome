@@ -49,7 +49,7 @@ function parseScore(text) {
     if (bracketed) event.rehearsal = String(measure);
     const rehM = remaining.match(/^\[([^\]]+)\]/);
     if (rehM) { event.rehearsal = rehM[1]; remaining = remaining.slice(rehM[0].length).trim(); }
-    const tsM = remaining.match(/(\d+)\/(\d+)/);
+    const tsM = remaining.match(/(\d+)\/(\d+)(?![.=])/);
     if (tsM) {
       event.numerator = parseInt(tsM[1]);
       event.denominator = parseInt(tsM[2]);
@@ -195,7 +195,7 @@ function oneDenomUnitSec(mState, tempoScale) {
   const { tempoBPM, tempoDenom, tempoDotted, denominator } = mState;
   // dotted note tempo: one beat = 1.5 × tempoDenom note-values
   const dotFactor = tempoDotted ? 1.5 : 1;
-  return (tempoDenom / denominator) * dotFactor * (60 / (tempoBPM * tempoScale));
+  return (tempoDenom / denominator) * (60 / (tempoBPM * tempoScale * dotFactor));
 }
 
 // ─── Timeline helpers ─────────────────────────────────────────────────────────
