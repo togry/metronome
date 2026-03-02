@@ -439,9 +439,9 @@ function Metronome() {
         tickData.weight === 1 ? [700,  0.40] :
                                 [460,  0.15];
       osc.frequency.value = freq;
+      const tAudio = Math.max(ctx.currentTime, t - btLatencyRef.current);
       g.gain.setValueAtTime(vol, tAudio);
       g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
-      const tAudio = Math.max(ctx.currentTime, t - btLatencyRef.current);
       osc.start(tAudio); osc.stop(tAudio + 0.07);
 
       // UI sync
