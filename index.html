@@ -357,7 +357,7 @@ function Metronome() {
       rootRef.current.style.height = "100vh";
     }
   }, []);
-  const mobile = winWidth < 640;
+  const mobile = winWidth < 768 || winHeight < 500; // phones in landscape: wide but short
   const portrait = mobile && winHeight > winWidth;
   // Which measure to preview in the pattern display (follows timeline hover/click when not playing)
   const [previewMeasure, setPreviewMeasure] = useState(1);
@@ -664,6 +664,8 @@ function Metronome() {
       const hi = Math.max(anchorMn, mn);
       setLoopStart(lo);
       setLoopEnd(hi + 1);
+      setStartMeasure(lo);
+      setPreviewMeasure(lo);
       dragStateRef.current.confirmed = true;
       return;
     }
@@ -1038,13 +1040,13 @@ function Metronome() {
         </div>
       )}
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0, ...(mobile && !portrait ? { overflow: "auto", WebkitOverflowScrolling: "touch" } : {}) }}>
 
         {/* Desktop score editor */}
         {!mobile && scorePanel}
 
         {/* ── Main panel ── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0, ...(mobile && !portrait ? { overflow: "visible", minHeight: "unset" } : {}) }}>
 
           {/* Controls bar */}
           <div style={{
@@ -1054,6 +1056,7 @@ function Metronome() {
             alignItems: mobile ? "center" : "flex-end",
             flexWrap: mobile ? "nowrap" : "wrap",
             background: C.bgMid, flexShrink: 0,
+            ...(mobile && !portrait ? { flexWrap: "wrap" } : {}),
           }}>
             {/* Play/stop */}
             <button ref={playBtnRef} onClick={handlePlay} style={{
@@ -1139,6 +1142,7 @@ function Metronome() {
             background: C.bgMid, flexShrink: 0,
             ...(mobile ? {} : { paddingTop: 8 }),
             ...(portrait ? { overflowY: "auto", maxHeight: "38vh", WebkitOverflowScrolling: "touch" } : {}),
+            ...(mobile && !portrait ? { flexShrink: 0 } : {}),
           }}>
             {/* Subdivision */}
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -1217,6 +1221,7 @@ function Metronome() {
             padding: mobile ? "8px 12px" : "12px 20px",
             borderBottom: `1px solid ${C.border}`,
             background: C.bgDark, flexShrink: 0,
+            ...(mobile && !portrait ? { flexShrink: 0 } : {}),
           }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1, marginBottom: 8, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
               <span>PATTERN</span>
@@ -1450,7 +1455,7 @@ function Metronome() {
           </div>
 
           {/* ── Measure grid ── */}
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: mobile ? "8px 12px" : "12px 20px", minHeight: 0, touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: mobile ? "8px 12px" : "12px 20px", minHeight: 0, touchAction: "pan-y", WebkitOverflowScrolling: "touch", ...(mobile && !portrait ? { flex: "none", overflowY: "visible", minHeight: "unset" } : {}) }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 6 }}>MEASURES</div>
             <div style={{
               display: "grid",
