@@ -382,6 +382,7 @@ function Metronome() {
   const timelineRef       = useRef(null);   // inner content
   const timelineScrollRef = useRef(null);   // scroll container
   const dragStateRef        = useRef(null);
+  const lastTapRef          = useRef({ mn: null, time: 0 }); // for double-tap loop on timeline
   const skipPlayEffectRef   = useRef(false);
   const playBtnRef          = useRef(null);
   const countInEnabledRef = useRef(countInEnabled); countInEnabledRef.current = countInEnabled;
@@ -623,60 +624,63 @@ function Metronome() {
       dragStateRef.current = null;
       return;
     }
-    // Single finger: record start; decide drag vs tap on move/end
     const touch = e.touches[0];
     const mn = measureFromX(touch.clientX);
-    dragStateRef.current = { anchorMn: mn, startX: touch.clientX, startY: touch.clientY, confirmed: false };
+    const now = Date.now();
+    const last = lastTapRef.current;
+    const isDoubleTap = last.mn !== null && now - last.time < 350;
+
+    if (isDoubleTap) {
+      // Double-tap: enter loop-definition mode anchored at the tapped measure
+      lastTapRef.current = { mn: null, time: 0 }; // consume the double-tap
+      dragStateRef.current = { anchorMn: mn, startX: touch.clientX, loopMode: true, confirmed: false };
+      // Set the loop anchor immediately
+      setLoopStart(mn);
+      setLoopEnd(mn + 1);
+    } else {
+      // Single tap / start of drag: just record position, decide on end
+      lastTapRef.current = { mn, time: now };
+      dragStateRef.current = { anchorMn: mn, startX: touch.clientX, startY: touch.clientY, loopMode: false, confirmed: false };
+    }
   }
 
   function handleTimelineTouchMove(e) {
-    // If a second finger appears mid-gesture, abort the drag and let it scroll
+    // Two-finger = scroll; release control
     if (e.touches.length >= 2) {
       dragStateRef.current = null;
       return;
     }
     if (!dragStateRef.current) return;
     const touch = e.touches[0];
-    const { anchorMn, startX, startY, confirmed } = dragStateRef.current;
-    const dx = Math.abs(touch.clientX - startX);
-    const dy = Math.abs(touch.clientY - startY);
+    const { anchorMn, startX, startY, loopMode, confirmed } = dragStateRef.current;
 
-    if (!confirmed) {
-      if (dx < 6 && dy < 6) return;
-      if (dy > dx) {
-        dragStateRef.current = null;
-        return;
-      }
-      // Confirmed horizontal drag — take control
-      dragStateRef.current.confirmed = true;
-      setStartMeasure(anchorMn);
-      setPreviewMeasure(anchorMn);
-      setLoopStart(null);
-      setLoopEnd(null);
-      if (isPlayingRef.current) {
-        posRef.current = { measure: anchorMn, tick: 0 };
-        setCurrentMeasure(anchorMn);
-        setCurrentBeat(0);
-      }
-    }
-
-    e.preventDefault();
-    const mn = measureFromX(touch.clientX);
-    if (mn !== anchorMn) {
+    if (loopMode) {
+      // Double-tap drag: define loop freely, prevent scroll
+      e.preventDefault();
+      const mn = measureFromX(touch.clientX);
       const lo = Math.min(anchorMn, mn);
       const hi = Math.max(anchorMn, mn);
-      setStartMeasure(lo);
-      setPreviewMeasure(lo);
       setLoopStart(lo);
       setLoopEnd(hi + 1);
+      dragStateRef.current.confirmed = true;
+      return;
+    }
+
+    // Single-finger: don't intercept — let native scroll handle it.
+    // We'll commit the tap action on touchend only if there was no significant movement.
+    const dx = Math.abs(touch.clientX - startX);
+    const dy = Math.abs(touch.clientY - (startY ?? touch.clientY));
+    if (dx > 8 || dy > 8) {
+      // Movement detected — cancel the tap, let browser scroll
+      dragStateRef.current = null;
     }
   }
 
   function handleTimelineTouchEnd(e) {
     if (!dragStateRef.current) return;
-    const { anchorMn, confirmed } = dragStateRef.current;
-    if (!confirmed) {
-      // Short tap — set start position
+    const { anchorMn, loopMode, confirmed } = dragStateRef.current;
+    if (!loopMode && !confirmed) {
+      // Clean tap: set start position, clear loop
       setStartMeasure(anchorMn);
       setPreviewMeasure(anchorMn);
       setLoopStart(null);
@@ -1257,7 +1261,7 @@ function Metronome() {
           <div style={{ padding: mobile ? "8px 12px 4px" : "12px 20px 4px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>
               {mobile
-                ? "TIMELINE · tap = start · 1-finger drag = loop · 2-finger drag = scroll"
+                ? "TIMELINE · tap = start · double-tap & drag = loop · 2-finger drag = scroll"
                 : "TIMELINE · click = set start · drag = loop · shift-click = set loop end"}
             </div>
 
