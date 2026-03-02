@@ -62,7 +62,7 @@ function parseScore(text) {
     }
     const tempoM = remaining.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
     if (tempoM) { event.tempoDenom = parseInt(tempoM[1]); event.tempoDotted = tempoM[2] === "."; event.tempoBPM = parseInt(tempoM[3]); }
-    if (event.rehearsal || event.numerator || event.tempoBPM) events.push(event);
+    if (event.rehearsal || event.numerator || event.tempoBPM || event.grouping) events.push(event);
   }
   events.sort((a, b) => a.measure - b.measure);
   let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
@@ -78,14 +78,34 @@ function parseScore(text) {
     if (ev.grouping)    changes[ev.measure].grouping    = ev.grouping;
     if (ev.tempoBPM)  { changes[ev.measure].tempoDenom = ev.tempoDenom; changes[ev.measure].tempoDotted = ev.tempoDotted || false; changes[ev.measure].tempoBPM = ev.tempoBPM; }
   }
+  // knownGroupings: updated during forward pass so each entry only reflects
+  // groupings seen *before* the current measure. Key = "num/denom".
+  const knownGroupings = {};
+
   const lastMeasure = fineAt < Infinity ? fineAt : Math.max(...Object.keys(changes).map(Number), 1) + 20;
   for (let mn = 1; mn <= lastMeasure; mn++) {
     if (changes[mn]) {
       const c = changes[mn];
+      const newNum = c.numerator   ?? state.numerator;
+      const newDen = c.denominator ?? state.denominator;
+      // Grouping resolution priority:
+      //   1. Explicitly given on this line — also update knownGroupings for this sig
+      //   2. Previously seen grouping for this exact time signature (from earlier in score)
+      //   3. Carry forward if the time signature is unchanged
+      //   4. Null (new time sig, never seen a grouping for it)
+      let resolvedGrouping;
+      if (c.grouping) {
+        resolvedGrouping = c.grouping;
+        knownGroupings[`${newNum}/${newDen}`] = c.grouping;
+      } else {
+        resolvedGrouping =
+          knownGroupings[`${newNum}/${newDen}`]
+          ?? (newNum === state.numerator && newDen === state.denominator ? state.grouping : null);
+      }
       state = {
-        numerator:   c.numerator   ?? state.numerator,
-        denominator: c.denominator ?? state.denominator,
-        grouping:    c.grouping    ?? (c.numerator ? null : state.grouping),
+        numerator:   newNum,
+        denominator: newDen,
+        grouping:    resolvedGrouping,
         tempoDenom:  c.tempoDenom  ?? state.tempoDenom,
         tempoDotted: c.tempoDotted ?? state.tempoDotted,
         tempoBPM:    c.tempoBPM   ?? state.tempoBPM,
@@ -288,11 +308,13 @@ const PALETTES = {
 const DEFAULT_SCORE = `1: 4/4, 1/4=90
 12: [A]
 17: 7/8 (2+2+3)
-19: [B] 7/8 (3+2+2)
-20: 7/8 (2+2+3)
-24: 8/8 (3+3+2) 1/4=72
-28: [C] 4/4
-38: Fine`;
+19: [B] 7/8         # inherits (2+2+3) from m.17
+21: (3+2+2)         # grouping-only line: changes subdivision, keeps 7/8
+[22]: 4/4           # bracketed: measure number becomes rehearsal mark
+23: 7/8             # inherits (3+2+2) from m.21 despite the 4/4 gap
+25: [C] 8/8 (3+3+2) 1/4=72
+29: 4/4
+39: Fine`;
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -306,6 +328,7 @@ function Metronome() {
   const [currentBeat, setCurrentBeat]       = useState(0);
   const [subdivIdx, setSubdivIdx]           = useState(0);
   const [startMeasure, setStartMeasure]     = useState(1);
+  const [loopStart, setLoopStart]           = useState(null);
   const [loopEnd, setLoopEnd]               = useState(null);
   const [tempoScale, setTempoScale]         = useState(100);
   const [parseError, setParseError]         = useState("");
@@ -351,12 +374,14 @@ function Metronome() {
   const subdivIdxRef     = useRef(subdivIdx);           subdivIdxRef.current = subdivIdx;
   const tempoScaleRef    = useRef(tempoScale / 100);    tempoScaleRef.current = tempoScale / 100;
   const startMeasureRef  = useRef(startMeasure);        startMeasureRef.current = startMeasure;
+  const loopStartRef     = useRef(loopStart);           loopStartRef.current = loopStart;
   const loopEndRef       = useRef(loopEnd);             loopEndRef.current = loopEnd;
 
   const timelineRef       = useRef(null);   // inner content
   const timelineScrollRef = useRef(null);   // scroll container
   const dragStateRef        = useRef(null);
   const skipPlayEffectRef   = useRef(false);
+  const playBtnRef          = useRef(null);
   const countInEnabledRef = useRef(countInEnabled); countInEnabledRef.current = countInEnabled;
   const countInBeatsRef   = useRef(countInBeats);   countInBeatsRef.current = countInBeats;
   const countInDenomRef   = useRef(countInDenom);   countInDenomRef.current = countInDenom;
@@ -384,7 +409,7 @@ function Metronome() {
       const loopE = loopEndRef.current;
 
       if (loopE !== null && measure >= loopE) {
-        posRef.current = { measure: startMeasureRef.current, tick: 0 };
+        posRef.current = { measure: loopStartRef.current ?? startMeasureRef.current, tick: 0 };
         continue;
       }
       if (measure >= fineAt) {
@@ -528,6 +553,7 @@ function Metronome() {
       setParseError("");
       setStartMeasure(1);
       setPreviewMeasure(1);
+      setLoopStart(null);
       setLoopEnd(null);
     } catch (e) { setParseError(e.message); }
   }
@@ -536,6 +562,7 @@ function Metronome() {
 
   const { measures, fineAt } = parsed;
   const totalMeasures = fineAt < Infinity ? fineAt : Object.values(measures).filter(Boolean).length;
+  const totalMeasuresRef = useRef(0); totalMeasuresRef.current = totalMeasures;
   const MIN_PX_PER_MEASURE = 22;
   const timelineContentWidth = Math.max(totalMeasures * MIN_PX_PER_MEASURE, 200);
   const measPx = (mn) => Math.round(((mn - 1) / Math.max(1, totalMeasures - 1)) * (timelineContentWidth - 1));
@@ -558,6 +585,7 @@ function Metronome() {
       dragStateRef.current = { anchorMn: mn };
       setStartMeasure(mn);
       setPreviewMeasure(mn);
+      setLoopStart(null);
       setLoopEnd(null);
       // Reposition playback immediately if playing
       if (isPlayingRef.current) {
@@ -577,6 +605,7 @@ function Metronome() {
       const hi = Math.max(anchorMn, mn);
       setStartMeasure(lo);
       setPreviewMeasure(lo);
+      setLoopStart(lo);
       setLoopEnd(hi + 1);
     }
   }
@@ -619,6 +648,7 @@ function Metronome() {
       dragStateRef.current.confirmed = true;
       setStartMeasure(anchorMn);
       setPreviewMeasure(anchorMn);
+      setLoopStart(null);
       setLoopEnd(null);
       if (isPlayingRef.current) {
         posRef.current = { measure: anchorMn, tick: 0 };
@@ -634,6 +664,7 @@ function Metronome() {
       const hi = Math.max(anchorMn, mn);
       setStartMeasure(lo);
       setPreviewMeasure(lo);
+      setLoopStart(lo);
       setLoopEnd(hi + 1);
     }
   }
@@ -645,6 +676,7 @@ function Metronome() {
       // Short tap — set start position
       setStartMeasure(anchorMn);
       setPreviewMeasure(anchorMn);
+      setLoopStart(null);
       setLoopEnd(null);
       if (isPlayingRef.current) {
         posRef.current = { measure: anchorMn, tick: 0 };
@@ -677,6 +709,65 @@ function Metronome() {
     else if (px > sl + vw - margin) scrollEl.scrollLeft = px - vw + margin;
   }, [currentMeasure, startMeasure, playing]);
 
+  // Keyboard navigation: ←/→ to move measure, Shift+←/→ to set loop region
+  useEffect(() => {
+    function handleKeyDown(e) {
+      // Don't intercept when typing in score editor or any input/textarea
+      const tag = document.activeElement?.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
+      if (e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        if (isPlayingRef.current) {
+          setPlaying(false);
+        } else {
+          // handlePlay() would be stale here — trigger a click on the play button instead
+          playBtnRef.current?.click();
+        }
+        return;
+      }
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const total     = totalMeasuresRef.current;
+      const cur       = startMeasureRef.current;
+      const loopE     = loopEndRef.current;
+      const loopS     = loopStartRef.current;
+      const dir       = e.key === "ArrowRight" ? 1 : -1;
+      if (e.shiftKey) {
+        // Shift+arrow: define or adjust a loop.
+        // The current measure (cur) is always the anchor; shift+arrow sets the other endpoint.
+        // If a loop is already defined from this same anchor, extend or shrink it.
+        // If cur is outside the existing loop (navigated away), clear and start a fresh one.
+        const loopIsFromHere = loopE !== null && loopS === cur;
+        if (loopIsFromHere) {
+          // Adjust the far end of the existing loop
+          const newEnd = Math.max(cur + 1, Math.min(total, loopE + dir));
+          setLoopEnd(newEnd);
+        } else {
+          // Fresh loop anchored at cur — the other endpoint is one step in dir
+          const far = Math.max(1, Math.min(total, cur + dir));
+          if (far !== cur) {
+            const lo = Math.min(cur, far);
+            const hi = Math.max(cur, far);
+            setLoopStart(lo);
+            setLoopEnd(hi + 1);
+          }
+        }
+      } else {
+        // Plain arrow: move cursor (startMeasure). Loop is left completely untouched.
+        const newMn = Math.max(1, Math.min(total, cur + dir));
+        setStartMeasure(newMn);
+        setPreviewMeasure(newMn);
+        if (isPlayingRef.current) {
+          posRef.current = { measure: newMn, tick: 0 };
+          setCurrentMeasure(newMn);
+          setCurrentBeat(0);
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // ── Derived display ───────────────────────────────────────────────────────
 
   const timelineEvents = getTimelineEvents(measures, fineAt);
@@ -684,6 +775,13 @@ function Metronome() {
   const previewMs      = measures[previewMeasure] || measures[startMeasure] || measures[1];
   const previewPattern = previewMs ? getBeatPattern(previewMs, targetDenom) : [];
   const activeBeat     = playing && previewMeasure === currentMeasure ? currentBeat : -1;
+
+  // Last rehearsal mark at or before the displayed measure (always defined once any RM exists)
+  const dispMn = playing ? currentMeasure : previewMeasure;
+  let lastRM = null;
+  for (let m = dispMn; m >= 1; m--) {
+    if (measures[m]?.rehearsal) { lastRM = { mark: measures[m].rehearsal, atCurrent: m === dispMn }; break; }
+  }
 
   const flashColors = { measure: C.measure, primary: C.primary, unit: C.unit };
 
@@ -900,6 +998,12 @@ function Metronome() {
                 "2-finger drag on touch → scroll timeline horizontally.",
                 "Playhead tracks position during playback; click while playing to jump.",
               ]},
+              { h: "Keyboard Shortcuts", body: [
+                "← / →  Move start position one measure at a time.",
+                "Shift+← / Shift+→  Extend or shrink the loop end point.",
+                "  (If no loop is active, Shift+→ starts one from the current measure.)",
+                "Keyboard is ignored while typing in the score editor.",
+              ]},
               { h: "Measure Grid", body: [
                 "Click any cell to set start position.",
                 "Active measure highlighted in gold. Loop region in orange.",
@@ -943,7 +1047,7 @@ function Metronome() {
             background: C.bgMid, flexShrink: 0,
           }}>
             {/* Play/stop */}
-            <button onClick={handlePlay} style={{
+            <button ref={playBtnRef} onClick={handlePlay} style={{
               background: playing ? C.redDim : C.greenDim,
               border: `2px solid ${playing ? C.red : C.green}`,
               color: countingIn ? C.gold : playing ? "#ff8888" : "#88ffaa",
@@ -1009,12 +1113,10 @@ function Metronome() {
                     </div>
                   );
                 })()}
-                {(() => {
-                  const ms = measures[playing ? currentMeasure : previewMeasure];
-                  return ms?.rehearsal
-                    ? <div style={{ fontSize: 11, color: "#88aaff" }}>[{ms.rehearsal}]</div>
-                    : null;
-                })()}
+                <div style={{ fontSize: 11, minHeight: "1.3em",
+                  color: lastRM ? (lastRM.atCurrent ? C.gold : "#88aaff") : "transparent" }}>
+                  {lastRM ? `[${lastRM.mark}]` : "·"}
+                </div>
               </div>
             )}
           </div>
@@ -1071,12 +1173,10 @@ function Metronome() {
                     </div>
                   );
                 })()}
-                {(() => {
-                  const ms = measures[playing ? currentMeasure : previewMeasure];
-                  return ms?.rehearsal
-                    ? <div style={{ fontSize: 13, color: "#88aaff", letterSpacing: 2 }}>[{ms.rehearsal}]</div>
-                    : null;
-                })()}
+                <div style={{ fontSize: 13, letterSpacing: 2, minHeight: "1.4em",
+                  color: lastRM ? (lastRM.atCurrent ? C.gold : "#88aaff") : "transparent" }}>
+                  {lastRM ? `[${lastRM.mark}]` : "·"}
+                </div>
               </div>
             )}
           </div>
@@ -1102,7 +1202,7 @@ function Metronome() {
                   </span>
                 );
               })()}
-              {loopEnd !== null && <span style={{ color: C.orange }}>↺ m.{startMeasure}–{loopEnd - 1}</span>}
+              {loopEnd !== null && <span style={{ color: C.orange }}>↺ m.{loopStart ?? startMeasure}–{loopEnd - 1}</span>}
             </div>
             <div style={{ display: "flex", gap: mobile ? 6 : 5, flexWrap: "wrap", alignItems: "center" }}>
               {previewPattern.map((tick, i) => {
@@ -1170,8 +1270,8 @@ function Metronome() {
                 {loopEnd !== null && (
                   <div style={{
                     position: "absolute",
-                    left: measPx(startMeasure),
-                    width: Math.max(0, measPx(loopEnd) - measPx(startMeasure)),
+                    left: measPx(loopStart ?? startMeasure),
+                    width: Math.max(0, measPx(loopEnd) - measPx(loopStart ?? startMeasure)),
                     top: 0, bottom: 0,
                     background: `${C.orange}20`,
                     borderLeft: `2px solid ${C.orange}`,
@@ -1304,7 +1404,7 @@ function Metronome() {
                       fontFamily: "monospace", fontSize: 13, borderRadius: 3, outline: "none",
                     }} />
                 </div>
-                <button onClick={() => setLoopEnd(null)} style={{
+                <button onClick={() => { setLoopStart(null); setLoopEnd(null); }} style={{
                   background: C.redDim, border: `1px solid #442222`, color: "#cc6666",
                   padding: mobile ? "8px 12px" : "4px 10px",
                   cursor: "pointer", borderRadius: 3,
@@ -1314,7 +1414,7 @@ function Metronome() {
               </>
             )}
             <div style={{ marginLeft: "auto", fontSize: 10, color: C.textDim }}>
-              {loopEnd !== null ? `↺ m.${startMeasure}–${loopEnd - 1}` : `start m.${startMeasure}`}
+              {loopEnd !== null ? `↺ m.${loopStart ?? startMeasure}–${loopEnd - 1}` : `start m.${startMeasure}`}
             </div>
           </div>
 
@@ -1332,11 +1432,13 @@ function Metronome() {
                 const isActive = playing && ms.measureNumber === currentMeasure;
                 const isPrev   = !playing && ms.measureNumber === previewMeasure;
                 const isStart  = ms.measureNumber === startMeasure;
-                const inLoop   = loopEnd !== null && ms.measureNumber >= startMeasure && ms.measureNumber < loopEnd;
+                const isLoopStart = loopStart !== null && ms.measureNumber === loopStart;
+                const inLoop   = loopEnd !== null && ms.measureNumber >= (loopStart ?? startMeasure) && ms.measureNumber < loopEnd;
                 return (
                   <div key={ms.measureNumber}
                     onClick={() => {
                       setStartMeasure(ms.measureNumber);
+                      setLoopStart(null);
                       setLoopEnd(null);
                       if (!playing) setPreviewMeasure(ms.measureNumber);
                     }}
