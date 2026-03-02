@@ -279,6 +279,7 @@ const PALETTES = {
     textDim:    "#9090c0",   // 6.2:1 on bgMid  (was #7070a0 ~4.0)
     textFaint:  "#7a7aaa",   // 4.6:1 on bgMid  (was #404060 ~2.0)
     code:       "#00cc88",   // 9.5:1 on bgDark  (was #007755 ~3.5)
+    reh:        "#88aaff",   // rehearsal marks on timeline / controls
   },
   light: {
     bg:         "#f5f0e8",
@@ -287,19 +288,20 @@ const PALETTES = {
     border:     "#b0a890",
     borderHi:   "#8a7e6a",
     measure:    "#b80e0e",   // 5.0:1 on bg, 4.7:1 on bgDark
-    primary:    "#7a3e00",   // 7.4:1 on bg      (was #b06000 ~4.1)
-    unit:       "#005580",   // 6.2:1 on bg       (was #006699 ~5.5, slightly adjusted)
-    sub:        "#5e3d99",   // 7.1:1 on bg       (was #8866aa ~4.1)
-    gold:       "#5e3f00",   // 8.5:1 on bg       (was #8a6000 ~4.9)
-    green:      "#005c2a",
+    primary:    "#7a3e00",   // 7.4:1 on bg
+    unit:       "#003d66",   // 8.8:1 on bg  (deeper navy — was #005580 ~6.2)
+    sub:        "#4a2d80",   // 9.0:1 on bg  (deeper purple — was #5e3d99 ~7.1)
+    gold:       "#5e3f00",   // 8.5:1 on bg
+    green:      "#003d1a",   // dark forest green for text on greenDim
     greenDim:   "#c8ecd8",
     red:        "#bb1111",
     redDim:     "#f5d8d8",
     orange:     "#b85000",
     text:       "#1a1408",   // 16.1:1 on bg
-    textDim:    "#3e3428",   // 10.1:1 on bg      (was #5a4e38 ~7.2, even stronger)
-    textFaint:  "#5a4e38",   // 7.2:1 on bg       (was #9a8e78 ~2.8)
+    textDim:    "#3e3428",   // 10.1:1 on bg
+    textFaint:  "#5a4e38",   // 7.2:1 on bg
     code:       "#004d2a",   // 9.8:1 on bg
+    reh:        "#1a3a8a",   // rehearsal marks — deep ink blue, 8.5:1 on bg
   },
 };
 
@@ -890,9 +892,9 @@ function Metronome() {
           onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
           title={theme === "dark" ? "Switch to daylight palette" : "Switch to night palette"}
           style={{
-            background: "transparent",
+            background: theme === "dark" ? "transparent" : C.borderHi,
             border: `1px solid ${C.border}`,
-            color: C.textDim,
+            color: theme === "dark" ? C.primary : C.bg,
             borderRadius: 4,
             padding: "4px 8px",
             cursor: "pointer",
@@ -1003,11 +1005,10 @@ function Metronome() {
                 "☀ / 🌙  Toggle between dark and daylight palettes.",
               ]},
               { h: "Timeline", body: [
-                "Click (or tap) → set start position.",
-                "Drag (1 finger on touch) → define loop region.",
-                "Shift-click → set loop end independently.",
-                "2-finger drag on touch → scroll timeline horizontally.",
-                "Playhead tracks position during playback; click while playing to jump.",
+                "Desktop: click → set start · drag → loop region · shift-click → set loop end.",
+                "Touch: tap → set start · double-tap then drag → loop region.",
+                "Touch: 2-finger drag → scroll timeline horizontally.",
+                "Playhead tracks position during playback; click/tap while playing to jump.",
               ]},
               { h: "Keyboard Shortcuts", body: [
                 "← / →  Move start position one measure at a time.",
@@ -1062,7 +1063,7 @@ function Metronome() {
             <button ref={playBtnRef} onClick={handlePlay} style={{
               background: playing ? C.redDim : C.greenDim,
               border: `2px solid ${playing ? C.red : C.green}`,
-              color: countingIn ? C.gold : playing ? "#ff8888" : "#88ffaa",
+              color: countingIn ? C.gold : playing ? (theme === "light" ? C.red : "#ff8888") : C.green,
               padding: mobile ? "12px 18px" : "9px 22px",
               cursor: "pointer", borderRadius: 4,
               fontSize: mobile ? 16 : 13, letterSpacing: 3,
@@ -1126,7 +1127,7 @@ function Metronome() {
                   );
                 })()}
                 <div style={{ fontSize: 11, minHeight: "1.3em",
-                  color: lastRM ? (lastRM.atCurrent ? C.gold : "#88aaff") : "transparent" }}>
+                  color: lastRM ? (lastRM.atCurrent ? C.gold : C.reh) : "transparent" }}>
                   {lastRM ? `[${lastRM.mark}]` : "·"}
                 </div>
               </div>
@@ -1209,7 +1210,7 @@ function Metronome() {
                   );
                 })()}
                 <div style={{ fontSize: 13, letterSpacing: 2, minHeight: "1.4em",
-                  color: lastRM ? (lastRM.atCurrent ? C.gold : "#88aaff") : "transparent" }}>
+                  color: lastRM ? (lastRM.atCurrent ? C.gold : C.reh) : "transparent" }}>
                   {lastRM ? `[${lastRM.mark}]` : "·"}
                 </div>
               </div>
@@ -1227,7 +1228,7 @@ function Metronome() {
               <span>PATTERN</span>
               <span style={{ color: C.gold }}>
                 m.{previewMeasure}
-                {measures[previewMeasure]?.rehearsal && <span style={{ color: "#88aaff" }}> [{measures[previewMeasure].rehearsal}]</span>}
+                {measures[previewMeasure]?.rehearsal && <span style={{ color: C.reh }}> [{measures[previewMeasure].rehearsal}]</span>}
               </span>
               {previewMs && (() => {
                 const groups = getPrimaryGroups(previewMs);
@@ -1254,8 +1255,8 @@ function Metronome() {
                   <div key={i} style={{
                     width: sz, height: sz,
                     borderRadius: tick.weight >= 2 ? 4 : "50%",
-                    background: isActive ? col : col + "33",
-                    border: `1.5px solid ${col}${isActive ? "ff" : "77"}`,
+                    background: isActive ? col : col + (theme === "light" ? "55" : "33"),
+                    border: `1.5px solid ${col}${isActive ? "ff" : (theme === "light" ? "99" : "77")}`,
                     boxShadow: isActive ? `0 0 14px ${col}, 0 0 6px ${col}` : "none",
                     transition: "box-shadow 0.04s, background 0.04s",
                     flexShrink: 0,
@@ -1348,16 +1349,26 @@ function Metronome() {
                       <div style={{
                         position: "absolute", left: 0, top: 0, bottom: 0,
                         width: isReh ? 2 : 1,
-                        background: ev.isFine ? C.measure : isReh ? "#88aaff" : C.borderHi,
+                        background: ev.isFine ? C.measure : isReh ? C.reh : C.borderHi,
                       }} />
                       <div style={{
                         position: "absolute", top: 3, left: 4,
-                        fontSize: mobile ? 8 : 9, lineHeight: 1.5, whiteSpace: "nowrap",
-                        color: ev.isFine ? C.measure : isReh ? "#aabbff" : C.textDim,
+                        fontSize: mobile ? 8 : 9, lineHeight: 1.4, whiteSpace: "nowrap",
                       }}>
-                        {isReh && <div style={{ fontWeight: "bold", fontSize: mobile ? 9 : 10, color: "#aaccff" }}>[{ev.rehearsal}]</div>}
-                        <div>{ev.numerator}/{ev.denominator}{ev.grouping ? ` (${ev.grouping.join("+")})` : ""}</div>
-                        {ev.isFine && <div style={{ color: C.measure }}>Fine</div>}
+                        {/* Line 1: rehearsal mark (or Fine) — fixed height so line 2 always aligns */}
+                        <div style={{ fontWeight: "bold", fontSize: mobile ? 9 : 10,
+                          color: ev.isFine ? C.measure : isReh ? C.reh : "transparent",
+                          height: mobile ? 12 : 14, overflow: "hidden" }}>
+                          {isReh ? `[${ev.rehearsal}]` : ev.isFine ? "Fine" : " "}
+                        </div>
+                        {/* Line 2: time signature */}
+                        <div style={{ color: ev.isFine ? C.measure : C.textDim }}>
+                          {ev.numerator}/{ev.denominator}
+                        </div>
+                        {/* Line 3: grouping */}
+                        <div style={{ color: C.textFaint }}>
+                          {ev.grouping ? `(${ev.grouping.join("+")})` : ""}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1486,28 +1497,31 @@ function Metronome() {
                         isActive ? `${C.gold}18` :
                         isPrev   ? `${C.unit}12` :
                         inLoop   ? `${C.orange}14` :
-                        ms.isFine? "#220a0a" : C.bgDark,
+                        ms.isFine? C.redDim : C.bgDark,
                       border: `1px solid ${
                         isActive ? C.gold :
                         isPrev   ? `${C.unit}88` :
                         isStart  ? C.green :
-                        ms.rehearsal ? "#5577cc" :
+                        ms.rehearsal ? C.reh :
                         inLoop ? `${C.orange}55` : C.border}`,
                     }}>
-                    <div style={{ fontSize: 8, color: isActive ? C.gold : C.textFaint }}>
-                      {ms.measureNumber}
-                    </div>
-                    {ms.rehearsal && (
-                      <div style={{ fontSize: mobile ? 9 : 10, color: "#88aaff", fontWeight: "bold" }}>
-                        [{ms.rehearsal}]
+                    {/* Top row: measure number left, rehearsal mark top-right */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ fontSize: 8, color: isActive ? C.gold : C.textFaint }}>
+                        {ms.measureNumber}
                       </div>
-                    )}
+                      {ms.rehearsal && (
+                        <div style={{ fontSize: mobile ? 8 : 9, color: C.reh, fontWeight: "bold", lineHeight: 1 }}>
+                          [{ms.rehearsal}]
+                        </div>
+                      )}
+                    </div>
+                    {/* Line 2: time signature — always present */}
                     <div style={{ fontSize: 8, color: C.textDim }}>
                       {ms.numerator}/{ms.denominator}
                     </div>
-                    {ms.grouping && !mobile && (
-                      <div style={{ fontSize: 7, color: C.textFaint }}>{ms.grouping.join("+")}</div>
-                    )}
+                    {/* Line 3: grouping — always reserve space so tiles stay same height */}
+                    <div style={{ fontSize: 7, color: C.textFaint, minHeight: "1em" }}>{ms.grouping ? ms.grouping.join("+") : ""}</div>
                     {ms.isFine && <div style={{ fontSize: 8, color: C.measure }}>Fine</div>}
                   </div>
                 );

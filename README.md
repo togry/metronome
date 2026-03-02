@@ -145,7 +145,7 @@ changes labelled. It scrolls horizontally when the piece is long.
 
 **Mobile / touchscreen:**
 - **Tap** to set the cursor
-- **Single-finger horizontal drag** to define a loop region
+- **Double-tap then drag** to define a loop region (avoids conflict with scrolling)
 - **Two-finger drag** to scroll the timeline horizontally
 
 ### Measure grid
