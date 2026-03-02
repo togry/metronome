@@ -331,6 +331,7 @@ function Metronome() {
   const [loopStart, setLoopStart]           = useState(null);
   const [loopEnd, setLoopEnd]               = useState(null);
   const [tempoScale, setTempoScale]         = useState(100);
+  const [btLatency, setBtLatency]           = useState(0);   // ms to advance audio for BT headsets
   const [parseError, setParseError]         = useState("");
   const [flash, setFlash]                   = useState(null);
   const [showScore, setShowScore]           = useState(false); // mobile score drawer
@@ -373,6 +374,7 @@ function Metronome() {
   const parsedRef        = useRef(parsed);              parsedRef.current = parsed;
   const subdivIdxRef     = useRef(subdivIdx);           subdivIdxRef.current = subdivIdx;
   const tempoScaleRef    = useRef(tempoScale / 100);    tempoScaleRef.current = tempoScale / 100;
+  const btLatencyRef     = useRef(btLatency / 1000);    btLatencyRef.current = btLatency / 1000;
   const startMeasureRef  = useRef(startMeasure);        startMeasureRef.current = startMeasure;
   const loopStartRef     = useRef(loopStart);           loopStartRef.current = loopStart;
   const loopEndRef       = useRef(loopEnd);             loopEndRef.current = loopEnd;
@@ -437,9 +439,10 @@ function Metronome() {
         tickData.weight === 1 ? [700,  0.40] :
                                 [460,  0.15];
       osc.frequency.value = freq;
-      g.gain.setValueAtTime(vol, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-      osc.start(t); osc.stop(t + 0.07);
+      g.gain.setValueAtTime(vol, tAudio);
+      g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
+      const tAudio = Math.max(ctx.currentTime, t - btLatencyRef.current);
+      osc.start(tAudio); osc.stop(tAudio + 0.07);
 
       // UI sync
       const delay = Math.max(0, (t - ctx.currentTime) * 1000);
@@ -1155,6 +1158,27 @@ function Metronome() {
                 style={{ width: mobile ? "100%" : 160, accentColor: C.gold, cursor: "pointer" }}
               />
             </div>
+
+            {/* Bluetooth latency offset */}
+            {btLatency > 0 || mobile ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>
+                  BT OFFSET <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span>
+                </label>
+                <input type="range" min={0} max={300} step={10} value={btLatency}
+                  onChange={e => setBtLatency(parseInt(e.target.value))}
+                  style={{ width: mobile ? "100%" : 120, accentColor: C.unit, cursor: "pointer" }}
+                />
+              </div>
+            ) : (
+              <button onClick={() => setBtLatency(50)}
+                style={{ background: "transparent", border: `1px solid ${C.border}`,
+                  color: C.textFaint, borderRadius: 3, padding: "3px 7px",
+                  cursor: "pointer", fontSize: 9, letterSpacing: 1, alignSelf: "flex-end",
+                  marginBottom: 2 }}>
+                BT OFFSET
+              </button>
+            )}
 
             {/* Desktop measure readout */}
             {!mobile && (
