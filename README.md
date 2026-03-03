@@ -1,8 +1,8 @@
 # Conductor — Score-Aware Metronome
 
 A metronome that follows a whole piece, not just a single time signature.
-Handles tempo changes, odd meters, rehearsal marks, and loops — all defined
-in a simple text format.
+Handles tempo changes, odd meters, rehearsal marks, repeats, and loops —
+all defined in a simple text format.
 
 ---
 
@@ -19,28 +19,47 @@ An internet connection is needed on first load to fetch the React library
 Each line describes what changes at a given measure:
 
 ```
-measure: [rehearsal mark] time_signature (grouping) 1/note=BPM
+measure_number separator [rehearsal_mark] time_signature (grouping) 1/note=BPM
 ```
 
-Putting the measure number in brackets makes it a rehearsal mark automatically:
+The separator between the measure number and the content determines the
+barline type (see **Repeat notation** below). The simplest separator is `|`
+or `:`, meaning a normal barline.
+
+All fields except the measure number and separator are optional.
+
+### Barline separators
+
+| Separator | Meaning |
+|-----------|---------|
+| `\|` or `:` | Normal barline |
+| `\|:` | Open repeat |
+| `:\|` | Close repeat |
+| `\|:\|` | Single-measure repeat |
+| `\|\|` | Double barline / section boundary (last one ends the score) |
+| `\|\|:` | Double barline + open repeat |
+| `:\|\|` | Close repeat + double barline |
+
+### Example score
 
 ```
-[12]: 4/4, 1/4=120
+1|: 4/4, 1/4=90       open repeat at m.1
+8:| [A]               close repeat; m.1-8 plays twice; rehearsal mark A
+9|: $ 7/8 (2+2+3)     open repeat; segno ($) at m.9
+16:|| [B]             close repeat; double barline; rehearsal mark B
+17|: 4/4              open new repeat
+24:| @                close repeat; coda jump point (@) for D.S.
+25| [C] 1/4=120       new section, faster
+32| DS al Coda        jump to $, and on return bail out at @
+33| Coda              coda section starts here
+36||                  end of score
 ```
 
-All fields except the measure number are optional.
-
-### Examples
+Putting the measure number in brackets is equivalent to supplying an explicit
+rehearsal mark with that number as the label:
 
 ```
-1:  4/4, 1/4=90          starts at m.1: 4/4, quarter = 90 bpm
-[12]: 7/8 (2+2+3)         m.12 is rehearsal mark "12", time changes to 7/8
-17: [B] 7/8              inherits grouping (2+2+3) from previous 7/8
-19: (3+2+2)              grouping-only: changes subdivision, keeps 7/8
-20: 4/4                  different time sig; later bare "7/8" recalls (3+2+2)
-24: 8/8 (3+3+2) 1/4=72   new time sig, new tempo
-28: 4/4                  back to 4/4 (tempo carries over)
-38: Fine                  playback stops after m.37
+[12]| 4/4, 1/4=120    same as: 12| [12] 4/4, 1/4=120
 ```
 
 ### Time signatures
@@ -61,7 +80,7 @@ For odd meters, specify how beats are grouped within the measure:
 Groupings are remembered per time signature. If you write `7/8 (2+2+3)` at
 measure 4 and bare `7/8` at measure 19 (even after intervening time signatures),
 measure 19 automatically inherits `(2+2+3)`. A grouping-only line like
-`19: (3+2+2)` changes the subdivision without re-stating the time signature,
+`19| (3+2+2)` changes the subdivision without re-stating the time signature,
 and updates the remembered grouping for future bare references.
 
 ### Tempo
@@ -71,24 +90,67 @@ A dotted note value can be written with a period: `1/4.=60` means dotted
 quarter = 60 bpm, the natural way to express compound meter tempos like
 6/8 and 12/8. The tempo stays in effect until the next tempo marking.
 
-### Fine
+### Repeat notation
 
-`38: Fine` means playback stops when it reaches measure 38 — so measure 37
-is the last measure that plays. To stop after measure 38, write `39: Fine`.
+The score is pre-expanded at parse time into a flat playback sequence, so
+all repeat-related structures affect only what is heard — the measure numbers
+in the score are always the written (not played) numbers.
+
+**Simple repeats** — `|:` opens a repeat section, `:|` closes it. The section
+plays twice. A `:|` at the very start of the score with no prior `|:` implicitly
+repeats from m.1.
+
+**Single-measure repeat** — `|:|` on a single line repeats just that measure.
+
+**Back-to-back sections** — use `:|` then `||:` on consecutive lines:
+
+```
+8:|      close first repeat
+9||:     double barline + open second repeat
+```
+
+**D.C. / D.S. al Fine / al Coda**
+
+| Directive | Meaning |
+|-----------|---------|
+| `DC al Fine` | Jump to m.1; stop when `Fine` is reached |
+| `DC al Coda` | Jump to m.1; at `@` jump to the `Coda` section |
+| `DS al Fine` | Jump to `$` (segno); stop at `Fine` |
+| `DS al Coda` | Jump to `$`; at `@` jump to the `Coda` section |
+
+Place `$` (segno) and `@` (coda jump point) as standalone tokens on their
+respective measure lines. The `Coda` section is skipped on the first pass
+when a D.C./D.S. al Coda is present; it is entered only via the jump.
+
+**End of score** — the last `||` or matched `:|` in the score ends playback.
+Use `||` (plain double barline) to end cleanly. `:||` is only valid when
+there is a matching `|:` earlier; an unmatched `:||` is flagged as a warning.
+
+### Parse warnings
+
+Structural problems are shown below the score editor in amber after parsing:
+
+- `:|` after any prior repeat with no matching `|:`
+- `:||` with no matching `|:` anywhere
+
+Warnings do not prevent playback; the parser falls back to reasonable behaviour
+(an unmatched `:|` with no prior repeats repeats from m.1).
 
 ### Comments and blank lines
 
-Lines starting with `#` or `//` are treated as comments and ignored.
-Blank lines are also ignored. Use them freely to annotate your score:
+Anything from `#` or `//` to the end of a line is treated as a comment and
+ignored. Comments can appear on their own line or after the content on any
+line. Blank lines are also ignored. Use them freely to annotate your score:
 
 ```
 # Symphony No. 5 — rehearsal score
 # ♩=120 throughout except [C]
 
-[1]: 4/4, 1/4=120
+1|: 4/4, 1/4=120
 
 # Transition
-[17]: 6/8, 1/4.=80
+16:|| [A]
+17||: 6/8, 1/4.=80
 ```
 
 ---
@@ -134,8 +196,10 @@ clears the old loop and starts a fresh one from the cursor position.
 
 ### Timeline
 
-The horizontal bar shows the full piece with rehearsal marks and time signature
-changes labelled. It scrolls horizontally when the piece is long.
+The horizontal bar shows the full piece with rehearsal marks, time signature
+changes, and repeat/navigation markers labelled. It scrolls horizontally
+when the piece is long. Double barlines (`||`, `:||`) are shown as heavier
+lines; segno (`$`), coda jump (`@`), and directives are shown in colour.
 
 **Desktop:**
 - **Click** anywhere to set the cursor (start position)
@@ -148,10 +212,21 @@ changes labelled. It scrolls horizontally when the piece is long.
 - **Double-tap then drag** to define a loop region (avoids conflict with scrolling)
 - **Two-finger drag** to scroll the timeline horizontally
 
+### Loops and repeats
+
+When a loop region is defined, only the measures within that region play and
+repeat. Repeat sections (`|: … :|`) that fall **completely inside** the loop
+are honoured — they play twice on every loop cycle. Repeats that **span a
+loop boundary** are ignored; only the measures within the loop window play.
+
+The loop end is **inclusive** — a loop set from m.6 to m.9 plays m.6, 7, 8,
+and 9, then wraps back to m.6.
+
 ### Measure grid
 
 Click or tap any cell to set the cursor. The currently playing measure is
-highlighted in gold; the loop region in orange.
+highlighted in gold; the loop region in orange. Tiles show the measure number,
+time signature, grouping, and any structural markers (`$`, `@`, directives).
 
 ### Mobile use
 

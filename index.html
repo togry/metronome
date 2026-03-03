@@ -32,67 +32,143 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
+// ─── Score line separator tokens ─────────────────────────────────────────────
+// Accepted separators between measure number and content:
+//   :        normal barline
+//   |        normal barline (alternative)
+//   |:       open repeat
+//   :|       close repeat
+//   ||       double barline (section boundary; last one ends score)
+//   ||:      double barline + open repeat
+//   :||      close repeat + double barline
+//   :|:      close repeat + open repeat (back-to-back repeated sections, no gap)
+//   :||:     close repeat + double barline + open repeat
+// Bracketed measure number [N] still supported with any separator.
+
 function parseScore(text) {
-  const lines = text.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("//") && !l.startsWith("#"));
-  const events = [];
+  const lines = text.split("\n")
+    .map(l => l.replace(/\s*(\/\/|#).*$/, "").trim())
+    .filter(l => l);
+
+  // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
+  // Separator pattern captures the full barline token between number and content.
+  const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
+
+  const rawEvents = []; // one per parsed line, in file order
+
   for (const line of lines) {
-    // Support both "12: ..." and "[12]: ..." — bracketed measure number becomes a rehearsal mark
-    const m = line.match(/^(\[?)(\d+)(\]?)\s*:\s*(.*)$/);
+    const m = line.match(SEP_RE);
     if (!m) continue;
     const bracketed = m[1] === "[" && m[3] === "]";
-    const measure = parseInt(m[2]);
-    const rest = m[4].trim();
-    if (/^fine$/i.test(rest)) { events.push({ measure, type: "fine" }); continue; }
+    const measure   = parseInt(m[2]);
+    const sep       = m[4];
+    const rest      = m[5].trim();
+
+    const ev = { measure, sep };
+
+    // Bracketed number is an implicit rehearsal mark
+    if (bracketed) ev.rehearsal = String(measure);
+
+    // Inline rehearsal mark [X]
     let remaining = rest;
-    const event = { measure, type: "change" };
-    // Bracketed measure number is the rehearsal mark; inline [X] overrides if also present
-    if (bracketed) event.rehearsal = String(measure);
     const rehM = remaining.match(/^\[([^\]]+)\]/);
-    if (rehM) { event.rehearsal = rehM[1]; remaining = remaining.slice(rehM[0].length).trim(); }
+    if (rehM) { ev.rehearsal = rehM[1]; remaining = remaining.slice(rehM[0].length).trim(); }
+
+    // || with no other content gives implicit rehearsal mark = measure number
+    if ((sep === "||" || sep === ":||" || sep === "||:") && !ev.rehearsal && !remaining) {
+      ev.rehearsal = String(measure);
+    }
+
+    // Directives (order matters — check multi-word first)
+    if      (/^DC\s+al\s+Coda$/i.test(remaining))  { ev.directive = "DC_CODA"; remaining = ""; }
+    else if (/^DC\s+al\s+Fine$/i.test(remaining))   { ev.directive = "DC_FINE"; remaining = ""; }
+    else if (/^DS\s+al\s+Coda$/i.test(remaining))   { ev.directive = "DS_CODA"; remaining = ""; }
+    else if (/^DS\s+al\s+Fine$/i.test(remaining))   { ev.directive = "DS_FINE"; remaining = ""; }
+    else if (/^Fine$/i.test(remaining))               { ev.directive = "FINE";    remaining = ""; }
+    else if (/^Coda$/i.test(remaining))               { ev.directive = "CODA";    remaining = ""; }
+
+    // Segno $
+    if (remaining.startsWith("$")) { ev.segno = true; remaining = remaining.slice(1).trim(); }
+    // Coda jump point @
+    if (remaining.startsWith("@")) { ev.codaJump = true; remaining = remaining.slice(1).trim(); }
+
+    // Time signature
     const tsM = remaining.match(/(\d+)\/(\d+)(?![.=])/);
     if (tsM) {
-      event.numerator = parseInt(tsM[1]);
-      event.denominator = parseInt(tsM[2]);
+      ev.numerator   = parseInt(tsM[1]);
+      ev.denominator = parseInt(tsM[2]);
       remaining = remaining.slice(remaining.indexOf(tsM[0]) + tsM[0].length).trim();
     }
+
+    // Grouping
     const grpM = remaining.match(/\(([0-9+]+)\)/);
     if (grpM) {
-      event.grouping = grpM[1].split("+").map(Number);
+      ev.grouping = grpM[1].split("+").map(Number);
       remaining = remaining.slice(remaining.indexOf(grpM[0]) + grpM[0].length).trim();
     }
+
+    // Tempo
     const tempoM = remaining.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
-    if (tempoM) { event.tempoDenom = parseInt(tempoM[1]); event.tempoDotted = tempoM[2] === "."; event.tempoBPM = parseInt(tempoM[3]); }
-    if (event.rehearsal || event.numerator || event.tempoBPM || event.grouping) events.push(event);
+    if (tempoM) {
+      ev.tempoDenom  = parseInt(tempoM[1]);
+      ev.tempoDotted = tempoM[2] === ".";
+      ev.tempoBPM    = parseInt(tempoM[3]);
+    }
+
+    rawEvents.push(ev);
   }
-  events.sort((a, b) => a.measure - b.measure);
+
+  // Sort by measure number (parser requires strictly increasing, but sort defensively)
+  rawEvents.sort((a, b) => a.measure - b.measure);
+
+  // ── Build measure-state map ────────────────────────────────────────────────
+  // Collect all structural info per measure number
+  const changes   = {};   // measure → state changes
+  const barlines  = {};   // measure → sep string
+  const directives = {};  // measure → directive string
+  const segnos    = {};   // measure → true
+  const codaJumps = {};   // measure → true
+
+  let lastDoublebar = null; // last measure with || or :|| → end of score
+
+  for (const ev of rawEvents) {
+    const mn = ev.measure;
+    barlines[mn] = ev.sep;
+
+    if (ev.directive)  directives[mn] = ev.directive;
+    if (ev.segno)      segnos[mn]     = true;
+    if (ev.codaJump)   codaJumps[mn]  = true;
+
+    if (ev.sep === "||" || ev.sep === ":||" || ev.sep === "||:")
+      lastDoublebar = mn;
+
+    if (!changes[mn]) changes[mn] = {};
+    if (ev.rehearsal)   changes[mn].rehearsal   = ev.rehearsal;
+    if (ev.numerator)   changes[mn].numerator   = ev.numerator;
+    if (ev.denominator) changes[mn].denominator = ev.denominator;
+    if (ev.grouping)    changes[mn].grouping    = ev.grouping;
+    if (ev.tempoBPM)  {
+      changes[mn].tempoDenom  = ev.tempoDenom;
+      changes[mn].tempoDotted = ev.tempoDotted || false;
+      changes[mn].tempoBPM    = ev.tempoBPM;
+    }
+  }
+
+  // End of score: last double-barline measure, or fallback (20 past last change)
+  const endAt = lastDoublebar !== null
+    ? lastDoublebar
+    : Math.max(...Object.keys(changes).map(Number), 1) + 20;
+
+  // ── Forward pass: build measures[] array ──────────────────────────────────
   let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
   const measures = [];
-  let fineAt = Infinity;
-  const changes = {};
-  for (const ev of events) {
-    if (ev.type === "fine") { fineAt = ev.measure; continue; }
-    if (!changes[ev.measure]) changes[ev.measure] = {};
-    if (ev.rehearsal)   changes[ev.measure].rehearsal   = ev.rehearsal;
-    if (ev.numerator)   changes[ev.measure].numerator   = ev.numerator;
-    if (ev.denominator) changes[ev.measure].denominator = ev.denominator;
-    if (ev.grouping)    changes[ev.measure].grouping    = ev.grouping;
-    if (ev.tempoBPM)  { changes[ev.measure].tempoDenom = ev.tempoDenom; changes[ev.measure].tempoDotted = ev.tempoDotted || false; changes[ev.measure].tempoBPM = ev.tempoBPM; }
-  }
-  // knownGroupings: updated during forward pass so each entry only reflects
-  // groupings seen *before* the current measure. Key = "num/denom".
   const knownGroupings = {};
 
-  const lastMeasure = fineAt < Infinity ? fineAt : Math.max(...Object.keys(changes).map(Number), 1) + 20;
-  for (let mn = 1; mn <= lastMeasure; mn++) {
+  for (let mn = 1; mn <= endAt; mn++) {
     if (changes[mn]) {
       const c = changes[mn];
       const newNum = c.numerator   ?? state.numerator;
       const newDen = c.denominator ?? state.denominator;
-      // Grouping resolution priority:
-      //   1. Explicitly given on this line — also update knownGroupings for this sig
-      //   2. Previously seen grouping for this exact time signature (from earlier in score)
-      //   3. Carry forward if the time signature is unchanged
-      //   4. Null (new time sig, never seen a grouping for it)
       let resolvedGrouping;
       if (c.grouping) {
         resolvedGrouping = c.grouping;
@@ -109,14 +185,176 @@ function parseScore(text) {
         tempoDenom:  c.tempoDenom  ?? state.tempoDenom,
         tempoDotted: c.tempoDotted ?? state.tempoDotted,
         tempoBPM:    c.tempoBPM   ?? state.tempoBPM,
-        rehearsal:   c.rehearsal,
+        rehearsal:   c.rehearsal  ?? undefined,
       };
     } else {
       state = { ...state, rehearsal: undefined };
     }
-    measures[mn] = { ...state, measureNumber: mn, isFine: mn === fineAt };
+    measures[mn] = {
+      ...state,
+      measureNumber: mn,
+      barline:   barlines[mn]   || ":",
+      directive: directives[mn] || null,
+      segno:     segnos[mn]     || false,
+      codaJump:  codaJumps[mn]  || false,
+      isEnd:     mn === endAt,
+    };
   }
-  return { measures, fineAt };
+
+  // ── Build playback sequence ────────────────────────────────────────────────
+  // Pre-expand all repeats and DC/DS/Fine/Coda into a flat array of measure numbers.
+  // This keeps the scheduler simple: just walk the array.
+
+  // Find structural landmarks
+  let segnoAt   = null;
+  let codaAt    = null;   // where Coda section starts
+  const repeatOpens = {}; // mn → true  (has |: )
+  const repeatCloses = {}; // mn → true (has :| )
+
+  for (let mn = 1; mn <= endAt; mn++) {
+    const ms = measures[mn];
+    if (!ms) continue;
+    if (ms.segno)    segnoAt = mn;
+    if (ms.directive === "CODA") codaAt = mn;
+    const sep = ms.barline;
+    if (sep === "|:" || sep === "||:" || sep === "|:|") repeatOpens[mn]  = true;
+    if (sep === ":|" || sep === ":||" || sep === "|:|") repeatCloses[mn] = true;
+  }
+
+  // Build sequence by simulating playback
+  const seq = [];
+  let mn = 1;
+  let repeatStack = []; // stack of open-repeat measure numbers
+  let dcDsActive  = false; // true after a DC/DS jump, suppresses repeat barlines
+  let codaMode    = false; // true = skip to Coda
+  let fineAt      = null;  // set when a FINE directive is encountered on DC/DS pass
+
+  const MAX_SEQ = 10000; // safety limit
+
+  function addMeasure(n) {
+    if (seq.length >= MAX_SEQ) return false;
+    seq.push(n);
+    return true;
+  }
+
+  // We need two passes in some cases (DC/DS), so encapsulate as a walk function
+  // that returns the next mn to jump to, or null when done.
+
+  // Simple iterative expansion:
+  // Phase 1: walk 1..endAt executing repeat barlines
+  // Phase 2: if DC/DS encountered, jump and walk again ignoring repeat barlines,
+  //          stopping at Fine or @ (coda jump)
+
+  const openStack = []; // stack of {openMn} for matching :|
+
+  // Find matching |: for each :| (greedy innermost pairing)
+  // :|| is a close-repeat only if there is a matching |: open on the stack;
+  // otherwise it is just a double-barline end and should not jump back.
+  const repeatPairs = {}; // closeMn → openMn
+  const warnings = [];     // parse warnings surfaced to user
+  let anyRepeatSeen = false;
+  {
+    const stack = [];
+    for (let n = 1; n <= endAt; n++) {
+      const sep = (measures[n] || {}).barline || ":";
+      // |:| (single-measure repeat): pairs with itself — open AND close on same bar.
+      if (sep === "|:|") { repeatPairs[n] = n; anyRepeatSeen = true; continue; }
+      // :|| closes only if there is a matching open on the stack.
+      const isClose = sep === ":|";
+      const isConditionalClose = sep === ":||";
+      if (isClose || isConditionalClose) {
+        if (stack.length > 0) {
+          repeatPairs[n] = stack.pop();
+        } else if (isClose) {
+          if (anyRepeatSeen) {
+            warnings.push("m." + n + ": close-repeat ':|' has no matching open repeat");
+          }
+          repeatPairs[n] = 1;
+        } else {
+          // isConditionalClose with empty stack — always an error
+          warnings.push("m." + n + ": ':||' has no matching open repeat — use '||' to end the score");
+        }
+      }
+      if (sep === "|:" || sep === "||:") { stack.push(n); anyRepeatSeen = true; }
+    }
+  }
+
+  // Update isClose check to also use repeatPairs (so :|| without open is not treated as close)
+  const isRepeatClose = (sep, n) =>
+    sep === ":|" || sep === "|:|" ||
+    (sep === ":||" && repeatPairs[n] !== undefined);
+
+  // Walk measures generating the sequence
+  // Returns index to continue from after a jump, or -1 when done
+  function walk(startMn, endMn, ignoreRepeats, stopAtFine, stopAtCodaJump) {
+    // repeatVisited: tracks close-repeat barlines already taken (each fires exactly once)
+    const repeatVisited = new Set();
+    let n = startMn;
+    while (n <= endMn) {
+      if (seq.length >= MAX_SEQ) return "done";
+      const ms = measures[n];
+      if (!ms) { n++; continue; }
+
+      const sep = ms.barline;
+      const isClose = !ignoreRepeats && isRepeatClose(sep, n);
+
+      // Always push the measure into the sequence first
+      seq.push(n);
+
+      // Handle close-repeat: jump back once
+      if (isClose && !repeatVisited.has(n)) {
+        repeatVisited.add(n);
+        n = repeatPairs[n] ?? 1;
+        continue;
+      }
+
+      // Stop conditions checked after the measure is played
+      if (stopAtFine && ms.directive === "FINE")  return "fine";
+      if (stopAtCodaJump && ms.codaJump)          return "coda";
+
+      // DC/DS directives — only active on first pass (ignoreRepeats = second pass)
+      if (!ignoreRepeats) {
+        const dir = ms.directive;
+        if (dir === "DC_FINE" || dir === "DC_CODA") {
+          const result = walk(1, endMn, true, dir === "DC_FINE", dir === "DC_CODA");
+          if (result === "coda" && codaAt !== null) walk(codaAt, endAt, true, false, false);
+          return "done";
+        }
+        if (dir === "DS_FINE" || dir === "DS_CODA") {
+          const from = segnoAt ?? 1;
+          const result = walk(from, endMn, true, dir === "DS_FINE", dir === "DS_CODA");
+          if (result === "coda" && codaAt !== null) walk(codaAt, endAt, true, false, false);
+          return "done";
+        }
+      }
+
+      if (ms.isEnd) return "done";
+
+      n++;
+    }
+    return "done";
+  }
+
+  // Skip Coda section on first pass: when we hit codaAt during normal walk,
+  // jump past it to endAt+1. We handle this by wrapping walk for first pass.
+  // Simpler: just do the walk and trim out the Coda section from the first pass.
+  // Actually the walk function already handles this implicitly — Coda section
+  // will be included on first pass unless we stop before it.
+  // The correct behaviour: on first pass, play straight through including Coda
+  // only if there is no DC/DS — i.e. if the piece has no DC/DS, Coda is just a
+  // labelled section that plays normally.
+  // If there IS a DC/DS al Coda, we need to skip Coda on first pass.
+  // Detect this:
+  const hasDCDS = Object.values(directives).some(d => d === "DC_CODA" || d === "DS_CODA");
+
+  if (hasDCDS && codaAt !== null) {
+    // First pass: walk 1..endAt but skip codaAt..endAt, stop before Coda
+    walk(1, codaAt - 1, false, false, false);
+  } else {
+    walk(1, endAt, false, false, false);
+  }
+
+  return { measures, seq, endAt, segnoAt, codaAt, warnings };
 }
 
 // ─── Beat Model ───────────────────────────────────────────────────────────────
@@ -220,7 +458,7 @@ function oneDenomUnitSec(mState, tempoScale) {
 
 // ─── Timeline helpers ─────────────────────────────────────────────────────────
 
-function getTimelineEvents(measures, fineAt) {
+function getTimelineEvents(measures, endAt) {
   const events = [];
   let prevSig = null;
   const mNums = Object.keys(measures).map(Number).filter(n => n >= 1).sort((a, b) => a - b);
@@ -236,7 +474,11 @@ function getTimelineEvents(measures, fineAt) {
         denominator: ms.denominator,
         grouping: ms.grouping,
         tempoBPM: ms.tempoBPM,
-        isFine: ms.isFine,
+        isFine: ms.isEnd,
+        directive: ms.directive,
+        barline: ms.barline,
+        segno: ms.segno,
+        codaJump: ms.codaJump,
       });
       prevSig = sig;
     }
@@ -307,16 +549,16 @@ const PALETTES = {
 
 // ─── Default score ────────────────────────────────────────────────────────────
 
-const DEFAULT_SCORE = `1: 4/4, 1/4=90
-12: [A]
-17: 7/8 (2+2+3)
-19: [B] 7/8         # inherits (2+2+3) from m.17
-21: (3+2+2)         # grouping-only line: changes subdivision, keeps 7/8
-[22]: 4/4           # bracketed: measure number becomes rehearsal mark
-23: 7/8             # inherits (3+2+2) from m.21 despite the 4/4 gap
-25: [C] 8/8 (3+3+2) 1/4=72
-29: 4/4
-39: Fine`;
+const DEFAULT_SCORE = `1|: 4/4, 1/4=90      # |: opens a repeat section
+8:| [A]              # :| closes it; rehearsal mark A
+9|: $ 7/8 (2+2+3)   # $ = segno; new repeat, odd meter
+16:|| [B]             # :|| closes repeat; || marks section boundary; rehearsal mark B
+17|: 4/4              # |: opens new repeat section
+24:| @               # close repeat; @ = coda jump point on D.S. pass
+25| [C] 1/4=120      # new section, faster
+32| DS al Coda       # go back to $ (segno), on return jump to @
+33| Coda             # coda section starts here
+36||                 # end of score (last double barline)`;
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -335,6 +577,7 @@ function Metronome() {
   const [tempoScale, setTempoScale]         = useState(100);
   const [btLatency, setBtLatency]           = useState(0);   // ms to advance audio for BT headsets
   const [parseError, setParseError]         = useState("");
+  const [parseWarnings, setParseWarnings]     = useState([]);
   const [flash, setFlash]                   = useState(null);
   const [showScore, setShowScore]           = useState(false); // mobile score drawer
   const [showHelp, setShowHelp]             = useState(false);
@@ -372,16 +615,35 @@ function Metronome() {
 
   const audioCtxRef      = useRef(null);
   const schedulerRef     = useRef(null);
-  const posRef           = useRef({ measure: 1, tick: 0 });
+  const posRef           = useRef({ seqIdx: 0, tick: 0 }); // seqIdx = index into parsed.seq
   const nextTickTimeRef  = useRef(0);
   const isPlayingRef     = useRef(false);
   const parsedRef        = useRef(parsed);              parsedRef.current = parsed;
+
+  // Compute loop seq-index bounds synchronously.
+  // Called from the scheduler so it's always up to date (no useEffect race).
+  function computeLoopSeqBounds(seq, loopStartMn, loopEndMn) {
+    let s = -1;
+    for (let i = 0; i < seq.length; i++) {
+      if (seq[i] >= loopStartMn && seq[i] <= loopEndMn) { s = i; break; }
+    }
+    if (s < 0) return { s: 0, e: 1 };
+    let e = s + 1;
+    for (let i = s + 1; i < seq.length; i++) {
+      if      (seq[i] >= loopStartMn && seq[i] <= loopEndMn) e = i + 1;
+      else if (seq[i] < loopStartMn)  break; // wrapped back before loop start
+      else                            break; // past loop end
+    }
+    return { s, e };
+  }
   const subdivIdxRef     = useRef(subdivIdx);           subdivIdxRef.current = subdivIdx;
   const tempoScaleRef    = useRef(tempoScale / 100);    tempoScaleRef.current = tempoScale / 100;
   const btLatencyRef     = useRef(btLatency / 1000);    btLatencyRef.current = btLatency / 1000;
   const startMeasureRef  = useRef(startMeasure);        startMeasureRef.current = startMeasure;
   const loopStartRef     = useRef(loopStart);           loopStartRef.current = loopStart;
   const loopEndRef       = useRef(loopEnd);             loopEndRef.current = loopEnd;
+  const loopSeqStartRef  = useRef(-1); // seq[] index of first measure in loop
+  const loopSeqEndRef    = useRef(0);   // seq[] index one past the last included measure
 
   const timelineRef       = useRef(null);   // inner content
   const timelineScrollRef = useRef(null);   // scroll container
@@ -408,23 +670,45 @@ function Metronome() {
   const scheduleNext = useCallback(() => {
     const ctx = audioCtxRef.current;
     if (!ctx || !isPlayingRef.current) return;
-    const { measures, fineAt } = parsedRef.current;
+    const { measures, seq } = parsedRef.current;
     const scheduleUntil = ctx.currentTime + 0.15;
 
     while (nextTickTimeRef.current < scheduleUntil) {
-      const { measure, tick } = posRef.current;
+      const { seqIdx, tick } = posRef.current;
       const loopE = loopEndRef.current;
+      const loopS = loopStartRef.current;
 
-      if (loopE !== null && measure >= loopE) {
-        posRef.current = { measure: loopStartRef.current ?? startMeasureRef.current, tick: 0 };
-        continue;
+      // ── Loop region (user-defined, overrides score structure) ────────────
+      if (loopE !== null) {
+        const loopStartMn = loopStartRef.current ?? startMeasureRef.current;
+        // Recompute bounds if loop params changed since last tick
+        if (loopSeqStartRef._loopS !== loopStartMn || loopSeqStartRef._loopE !== loopE) {
+          const { s, e } = computeLoopSeqBounds(seq, loopStartMn, loopE);
+          loopSeqStartRef.current = s;
+          loopSeqEndRef.current   = e;
+          loopSeqStartRef._loopS  = loopStartMn;
+          loopSeqStartRef._loopE  = loopE;
+        }
+        if (seqIdx >= loopSeqEndRef.current) {
+          posRef.current = { seqIdx: loopSeqStartRef.current, tick: 0 };
+          continue;
+        }
       }
-      if (measure >= fineAt) {
+
+      // If loop was just cleared, invalidate cache so next loop recomputes fresh
+      if (loopE === null) {
+        loopSeqStartRef._loopS = undefined;
+        loopSeqStartRef._loopE = undefined;
+      }
+
+      // ── End of sequence ───────────────────────────────────────────────────
+      if (seqIdx >= seq.length) {
         isPlayingRef.current = false;
         setPlaying(false);
         return;
       }
 
+      const measure = seq[seqIdx];
       const mState = measures[measure];
       if (!mState) { isPlayingRef.current = false; setPlaying(false); return; }
 
@@ -458,8 +742,8 @@ function Metronome() {
         setFlash(capW >= 3 ? "measure" : capW >= 2 ? "primary" : "unit");
       }, delay);
 
-      if (tick + 1 >= pattern.length) posRef.current = { measure: measure + 1, tick: 0 };
-      else posRef.current = { measure, tick: tick + 1 };
+      if (tick + 1 >= pattern.length) posRef.current = { seqIdx: seqIdx + 1, tick: 0 };
+      else posRef.current = { seqIdx, tick: tick + 1 };
 
       nextTickTimeRef.current += tickData.durationUnits * oneDenomUnitSec(mState, tempoScaleRef.current);
     }
@@ -491,9 +775,11 @@ function Metronome() {
 
     const ctx = getAudioCtx();
     const realStart = Math.max(1, startMeasure);
-    posRef.current = { measure: realStart, tick: 0 };
-    setCurrentMeasure(realStart);
-    setPreviewMeasure(realStart);
+    const { seq } = parsedRef.current;
+    const startSeqIdx = Math.max(0, seq.findIndex(mn => mn >= realStart));
+    posRef.current = { seqIdx: startSeqIdx, tick: 0 };
+    setCurrentMeasure(seq[startSeqIdx] ?? realStart);
+    setPreviewMeasure(seq[startSeqIdx] ?? realStart);
     setCurrentBeat(0);
     setFlash(null);
 
@@ -559,6 +845,7 @@ function Metronome() {
       const p = parseScore(scoreText);
       setParsed(p);
       setParseError("");
+      setParseWarnings(p.warnings || []);
       setStartMeasure(1);
       setPreviewMeasure(1);
       setLoopStart(null);
@@ -568,8 +855,8 @@ function Metronome() {
 
   // ── Timeline ──────────────────────────────────────────────────────────────
 
-  const { measures, fineAt } = parsed;
-  const totalMeasures = fineAt < Infinity ? fineAt : Object.values(measures).filter(Boolean).length;
+  const { measures, seq, endAt } = parsed;
+  const totalMeasures = endAt ?? Object.values(measures).filter(Boolean).length;
   const totalMeasuresRef = useRef(0); totalMeasuresRef.current = totalMeasures;
   const MIN_PX_PER_MEASURE = 22;
   const timelineContentWidth = Math.max(totalMeasures * MIN_PX_PER_MEASURE, 200);
@@ -588,7 +875,7 @@ function Metronome() {
     e.preventDefault();
     const mn = measureFromX(e.clientX);
     if (e.shiftKey) {
-      if (mn > startMeasure) setLoopEnd(mn + 1);
+      if (mn > startMeasure) setLoopEnd(mn);
     } else {
       dragStateRef.current = { anchorMn: mn };
       setStartMeasure(mn);
@@ -597,8 +884,10 @@ function Metronome() {
       setLoopEnd(null);
       // Reposition playback immediately if playing
       if (isPlayingRef.current) {
-        posRef.current = { measure: mn, tick: 0 };
-        setCurrentMeasure(mn);
+        const { seq: s } = parsedRef.current;
+        const newIdx = Math.max(0, s.findIndex(m => m >= mn));
+        posRef.current = { seqIdx: newIdx, tick: 0 };
+        setCurrentMeasure(s[newIdx] ?? mn);
         setCurrentBeat(0);
       }
     }
@@ -614,7 +903,7 @@ function Metronome() {
       setStartMeasure(lo);
       setPreviewMeasure(lo);
       setLoopStart(lo);
-      setLoopEnd(hi + 1);
+      setLoopEnd(hi);
     }
   }
 
@@ -640,7 +929,7 @@ function Metronome() {
       dragStateRef.current = { anchorMn: mn, startX: touch.clientX, loopMode: true, confirmed: false };
       // Set the loop anchor immediately
       setLoopStart(mn);
-      setLoopEnd(mn + 1);
+      setLoopEnd(mn);
     } else {
       // Single tap / start of drag: just record position, decide on end
       lastTapRef.current = { mn, time: now };
@@ -665,7 +954,7 @@ function Metronome() {
       const lo = Math.min(anchorMn, mn);
       const hi = Math.max(anchorMn, mn);
       setLoopStart(lo);
-      setLoopEnd(hi + 1);
+      setLoopEnd(hi);
       setStartMeasure(lo);
       setPreviewMeasure(lo);
       dragStateRef.current.confirmed = true;
@@ -692,8 +981,10 @@ function Metronome() {
       setLoopStart(null);
       setLoopEnd(null);
       if (isPlayingRef.current) {
-        posRef.current = { measure: anchorMn, tick: 0 };
-        setCurrentMeasure(anchorMn);
+        const { seq: s } = parsedRef.current;
+        const newIdx = Math.max(0, s.findIndex(mn => mn >= anchorMn));
+        posRef.current = { seqIdx: newIdx, tick: 0 };
+        setCurrentMeasure(s[newIdx] ?? anchorMn);
         setCurrentBeat(0);
       }
     }
@@ -762,7 +1053,7 @@ function Metronome() {
             const lo = Math.min(cur, far);
             const hi = Math.max(cur, far);
             setLoopStart(lo);
-            setLoopEnd(hi + 1);
+            setLoopEnd(hi);
           }
         }
       } else {
@@ -771,8 +1062,10 @@ function Metronome() {
         setStartMeasure(newMn);
         setPreviewMeasure(newMn);
         if (isPlayingRef.current) {
-          posRef.current = { measure: newMn, tick: 0 };
-          setCurrentMeasure(newMn);
+          const { seq: s } = parsedRef.current;
+          const newIdx = Math.max(0, s.findIndex(mn => mn >= newMn));
+          posRef.current = { seqIdx: newIdx, tick: 0 };
+          setCurrentMeasure(s[newIdx] ?? newMn);
           setCurrentBeat(0);
         }
       }
@@ -783,7 +1076,7 @@ function Metronome() {
 
   // ── Derived display ───────────────────────────────────────────────────────
 
-  const timelineEvents = getTimelineEvents(measures, fineAt);
+  const timelineEvents = getTimelineEvents(measures, endAt);
   const targetDenom    = SUBDIV_OPTIONS[subdivIdx].targetDenom;
   const previewMs      = measures[previewMeasure] || measures[startMeasure] || measures[1];
   const previewPattern = previewMs ? getBeatPattern(previewMs, targetDenom) : [];
@@ -836,6 +1129,7 @@ function Metronome() {
         WebkitAppearance: "none",
       }} />
       {parseError && <div style={{ color: "#ff6666", fontSize: 11 }}>{parseError}</div>}
+      {parseWarnings.map((w, i) => <div key={i} style={{ color: C.primary, fontSize: 11 }}>⚠ {w}</div>)}
       <button onClick={() => { handleParse(); if (mobile) setShowScore(false); }} style={{
         background: C.greenDim, border: `1px solid #336644`, color: C.green,
         padding: mobile ? "12px" : "7px 12px", cursor: "pointer", borderRadius: 3,
@@ -1308,7 +1602,7 @@ function Metronome() {
                   <div style={{
                     position: "absolute",
                     left: measPx(loopStart ?? startMeasure),
-                    width: Math.max(0, measPx(loopEnd) - measPx(loopStart ?? startMeasure)),
+                    width: Math.max(0, measPx(loopEnd + 1) - measPx(loopStart ?? startMeasure)),
                     top: 0, bottom: 0,
                     background: `${C.orange}20`,
                     borderLeft: `2px solid ${C.orange}`,
@@ -1349,7 +1643,7 @@ function Metronome() {
                       <div style={{
                         position: "absolute", left: 0, top: 0, bottom: 0,
                         width: isReh ? 2 : 1,
-                        background: ev.isFine ? C.measure : isReh ? C.reh : C.borderHi,
+                        background: ev.isFine ? C.text : isReh ? C.reh : (ev.barline === '||' || ev.barline === ':||' || ev.barline === '||:') ? C.textDim : C.borderHi,
                       }} />
                       <div style={{
                         position: "absolute", top: 3, left: 4,
@@ -1357,12 +1651,12 @@ function Metronome() {
                       }}>
                         {/* Line 1: rehearsal mark (or Fine) — fixed height so line 2 always aligns */}
                         <div style={{ fontWeight: "bold", fontSize: mobile ? 9 : 10,
-                          color: ev.isFine ? C.measure : isReh ? C.reh : "transparent",
+                          color: ev.isFine ? C.measure : isReh ? C.reh : ev.directive ? C.primary : (ev.segno || ev.codaJump) ? C.unit : "transparent",
                           height: mobile ? 12 : 14, overflow: "hidden" }}>
-                          {isReh ? `[${ev.rehearsal}]` : ev.isFine ? "Fine" : " "}
+                          {isReh ? `[${ev.rehearsal}]` : ev.isFine ? "‖" : ev.directive ? ev.directive.replace("DC_FINE","D.C. al Fine").replace("DC_CODA","D.C. al Coda").replace("DS_FINE","D.S. al Fine").replace("DS_CODA","D.S. al Coda").replace("FINE","Fine").replace("CODA","Coda") : ev.segno ? "$" : ev.codaJump ? "@" : " "}
                         </div>
                         {/* Line 2: time signature */}
-                        <div style={{ color: ev.isFine ? C.measure : C.textDim }}>
+                        <div style={{ color: C.textDim }}>
                           {ev.numerator}/{ev.denominator}
                         </div>
                         {/* Line 3: grouping */}
@@ -1443,7 +1737,7 @@ function Metronome() {
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>LOOP END</label>
-                  <input type="number" min={startMeasure + 1} max={totalMeasures} value={loopEnd - 1}
+                  <input type="number" min={startMeasure + 1} max={totalMeasures} value={loopEnd}
                     onChange={e => setLoopEnd(Math.max(startMeasure + 1, (parseInt(e.target.value) || startMeasure + 1)))}
                     style={{
                       background: C.bgDark, border: `1px solid ${C.border}`, color: C.text,
@@ -1461,7 +1755,7 @@ function Metronome() {
               </>
             )}
             <div style={{ marginLeft: "auto", fontSize: 10, color: C.textDim }}>
-              {loopEnd !== null ? `↺ m.${loopStart ?? startMeasure}–${loopEnd - 1}` : `start m.${startMeasure}`}
+              {loopEnd !== null ? `↺ m.${loopStart ?? startMeasure}–${loopEnd}` : `start m.${startMeasure}`}
             </div>
           </div>
 
@@ -1480,7 +1774,7 @@ function Metronome() {
                 const isPrev   = !playing && ms.measureNumber === previewMeasure;
                 const isStart  = ms.measureNumber === startMeasure;
                 const isLoopStart = loopStart !== null && ms.measureNumber === loopStart;
-                const inLoop   = loopEnd !== null && ms.measureNumber >= (loopStart ?? startMeasure) && ms.measureNumber < loopEnd;
+                const inLoop   = loopEnd !== null && ms.measureNumber >= (loopStart ?? startMeasure) && ms.measureNumber <= loopEnd;
                 return (
                   <div key={ms.measureNumber}
                     onClick={() => {
@@ -1497,7 +1791,7 @@ function Metronome() {
                         isActive ? `${C.gold}18` :
                         isPrev   ? `${C.unit}12` :
                         inLoop   ? `${C.orange}14` :
-                        ms.isFine? C.redDim : C.bgDark,
+                        ms.isEnd ? C.redDim : C.bgDark,
                       border: `1px solid ${
                         isActive ? C.gold :
                         isPrev   ? `${C.unit}88` :
@@ -1522,7 +1816,10 @@ function Metronome() {
                     </div>
                     {/* Line 3: grouping — always reserve space so tiles stay same height */}
                     <div style={{ fontSize: 7, color: C.textFaint, minHeight: "1em" }}>{ms.grouping ? ms.grouping.join("+") : ""}</div>
-                    {ms.isFine && <div style={{ fontSize: 8, color: C.measure }}>Fine</div>}
+                    {ms.isEnd && <div style={{ fontSize: 8, color: C.measure }}>‖</div>}
+                    {ms.directive && <div style={{ fontSize: 7, color: C.primary, lineHeight: 1 }}>{ms.directive.replace('DC_FINE','D.C.aF').replace('DC_CODA','D.C.aC').replace('DS_FINE','D.S.aF').replace('DS_CODA','D.S.aC').replace('FINE','Fine').replace('CODA','Coda')}</div>}
+                    {ms.segno && <div style={{ fontSize: 9, color: C.unit, fontWeight:'bold' }}>$</div>}
+                    {ms.codaJump && <div style={{ fontSize: 9, color: C.unit, fontWeight:'bold' }}>@</div>}
                   </div>
                 );
               })}
