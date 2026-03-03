@@ -154,10 +154,12 @@ function parseScore(text) {
     }
   }
 
-  // End of score: last double-barline measure, or fallback (20 past last change)
-  const endAt = lastDoublebar !== null
-    ? lastDoublebar
-    : Math.max(...Object.keys(changes).map(Number), 1) + 20;
+  // End of score: last double-barline measure.
+  // If no double barline exists, use the last measure defined in the score,
+  // and flag it so the scheduler loops back to m.1 automatically.
+  const lastDefinedMeasure = Math.max(...Object.keys(changes).map(Number), 1);
+  const noExplicitEnd = lastDoublebar === null;
+  const endAt = noExplicitEnd ? lastDefinedMeasure : lastDoublebar;
 
   // ── Forward pass: build measures[] array ──────────────────────────────────
   let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
@@ -354,7 +356,7 @@ function parseScore(text) {
     walk(1, endAt, false, false, false);
   }
 
-  return { measures, seq, endAt, segnoAt, codaAt, warnings };
+  return { measures, seq, endAt, segnoAt, codaAt, warnings, loopScore: noExplicitEnd };
 }
 
 // ─── Beat Model ───────────────────────────────────────────────────────────────
@@ -703,6 +705,11 @@ function Metronome() {
 
       // ── End of sequence ───────────────────────────────────────────────────
       if (seqIdx >= seq.length) {
+        if (parsedRef.current.loopScore) {
+          // No explicit end barline — loop the whole score from the beginning
+          posRef.current = { seqIdx: 0, tick: 0 };
+          continue;
+        }
         isPlayingRef.current = false;
         setPlaying(false);
         return;
@@ -1223,15 +1230,18 @@ function Metronome() {
             { key: "unit",    col: C.unit,    label: "UNIT" },
           ].map(({ key, col, label }) => (
             <div key={key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <div style={{
-                width: flash === key ? (mobile ? 20 : 22) : (mobile ? 11 : 13),
-                height: flash === key ? (mobile ? 20 : 22) : (mobile ? 11 : 13),
-                borderRadius: "50%",
-                background: flash === key ? col : col + "28",
-                border: `1px solid ${col}55`,
-                transition: "all 0.05s",
-                boxShadow: flash === key ? `0 0 14px ${col}, 0 0 28px ${col}55` : "none",
-              }} />
+              {/* Fixed-size outer container so layout never shifts */}
+              <div style={{ width: mobile ? 22 : 24, height: mobile ? 22 : 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{
+                  width:        flash === key ? (mobile ? 20 : 22) : (mobile ? 11 : 13),
+                  height:       flash === key ? (mobile ? 20 : 22) : (mobile ? 11 : 13),
+                  borderRadius: "50%",
+                  background:   flash === key ? col : col + "28",
+                  border:       `1px solid ${col}55`,
+                  transition:   "all 0.05s",
+                  boxShadow:    flash === key ? `0 0 14px ${col}, 0 0 28px ${col}55` : "none",
+                }} />
+              </div>
               {!mobile && <div style={{ fontSize: 8, color: flash === key ? col : C.textFaint, letterSpacing: 1 }}>{label}</div>}
             </div>
           ))}
@@ -1274,15 +1284,35 @@ function Metronome() {
             </div>
             {[
               { h: "Score Format", body: [
-                "Each line: measure: [mark] N/D (grouping) 1/note=BPM",
-                "All fields except the measure number are optional.",
-                "Bracketed measure number → also becomes rehearsal mark: [12]: 4/4",
-                "Lines starting with # or // are comments. Blank lines ignored.",
+                "Each line: measure separator [mark] N/D (grouping) 1/note=BPM",
+                "All fields except the measure number and separator are optional.",
+                "# or // starts a comment — can follow content on the same line.",
+                "Bracketed measure number → also becomes rehearsal mark: [12]| 4/4",
+                "Separator determines the barline type (see Repeat Notation below).",
+              ]},
+              { h: "Barline Separators", body: [
+                "  |  or  :    Normal barline",
+                "  |:          Open repeat",
+                "  :|          Close repeat (section plays twice)",
+                "  |:|         Single-measure repeat",
+                "  ||          Double barline; last one ends the score",
+                "  ||:         Double barline + open repeat",
+                "  :||         Close repeat + double barline",
+                "If no || is present, the score loops back to m.1 continuously.",
+              ]},
+              { h: "Repeat Notation", body: [
+                "DC al Fine    Jump to m.1; stop at Fine",
+                "DC al Coda    Jump to m.1; at @ jump to Coda section",
+                "DS al Fine    Jump to $ (segno); stop at Fine",
+                "DS al Coda    Jump to $; at @ jump to Coda section",
+                "Place $ (segno) and @ (coda jump point) on their measure lines.",
+                "Coda section is skipped on the first pass; entered only via DC/DS.",
               ]},
               { h: "Time Signatures", body: [
                 "Standard: 4/4  3/4  6/8  2/2  12/8",
                 "Compound (6/8, 12/8): primary beat = dotted quarter automatically.",
                 "Odd meters: add grouping, e.g.  7/8 (2+2+3)  or  5/8 (2+3)",
+                "Groupings are remembered per time signature across the score.",
               ]},
               { h: "Tempo", body: [
                 "Written as 1/note=BPM.  Examples:",
@@ -1304,6 +1334,11 @@ function Metronome() {
                 "Touch: 2-finger drag → scroll timeline horizontally.",
                 "Playhead tracks position during playback; click/tap while playing to jump.",
               ]},
+              { h: "Loops and Repeats", body: [
+                "Loop end is inclusive — loop m.6–9 plays m.6, 7, 8, 9 then wraps.",
+                "Repeats fully inside a loop are honoured (play twice per cycle).",
+                "Repeats spanning a loop boundary are ignored.",
+              ]},
               { h: "Keyboard Shortcuts", body: [
                 "← / →  Move start position one measure at a time.",
                 "Shift+← / Shift+→  Extend or shrink the loop end point.",
@@ -1313,10 +1348,8 @@ function Metronome() {
               { h: "Measure Grid", body: [
                 "Click any cell to set start position.",
                 "Active measure highlighted in gold. Loop region in orange.",
+                "Tiles show time signature, grouping, and structural markers ($, @).",
                 "On mobile, swipe vertically to scroll.",
-              ]},
-              { h: "Fine", body: [
-                "Add  38: Fine  to stop playback at the start of that measure.",
               ]},
             ].map(({ h, body }) => (
               <div key={h} style={{ marginBottom: 16 }}>
