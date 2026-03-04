@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Data files
+*.h5
+*.hdf5
+*.nc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node.js
+dist/
+node_modules/
+package-lock.json
