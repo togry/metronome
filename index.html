@@ -107,7 +107,34 @@ function parseScore(text) {
       remaining = remaining.slice(remaining.indexOf(grpM[0]) + grpM[0].length).trim();
     }
 
-    // Tempo
+    // a tempo — return to pre-rit tempo (check before tempo so it isn't confused)
+    if (/\ba tempo\b/i.test(remaining)) {
+      ev.atempo = true;
+      remaining = remaining.replace(/\ba tempo\b/i, "").trim();
+    }
+
+    // Rit / accel keyword — strip it first so its inline target isn't grabbed
+    // by the base tempo parser below.
+    // Syntax: [1/note=baseBPM] rit [1/note=targetBPM]
+    //      or [1/note=baseBPM] accel [1/note=targetBPM]
+    const ritM = remaining.match(/\b(rit|accel)\b/i);
+    if (ritM) {
+      ev.ritKind = ritM[1].toLowerCase();
+      // Split remaining into before-rit and after-rit
+      const ritIdx = remaining.search(/\b(rit|accel)\b/i);
+      const beforeRit = remaining.slice(0, ritIdx).trim();
+      const afterRit  = remaining.slice(ritIdx + ritM[0].length).trim();
+      remaining = beforeRit; // base tempo parser sees only the part before 'rit'
+      // Parse inline target tempo from the after-rit portion
+      const ritTempoM = afterRit.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
+      if (ritTempoM) {
+        ev.ritTargetDenom  = parseInt(ritTempoM[1]);
+        ev.ritTargetDotted = ritTempoM[2] === ".";
+        ev.ritTargetBPM    = parseInt(ritTempoM[3]);
+      }
+    }
+
+    // Base tempo (before rit keyword, or the whole remaining if no rit)
     const tempoM = remaining.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
     if (tempoM) {
       ev.tempoDenom  = parseInt(tempoM[1]);
@@ -152,6 +179,15 @@ function parseScore(text) {
       changes[mn].tempoDotted = ev.tempoDotted || false;
       changes[mn].tempoBPM    = ev.tempoBPM;
     }
+    if (ev.ritKind) {
+      changes[mn].ritKind        = ev.ritKind;
+      if (ev.ritTargetBPM) {
+        changes[mn].ritTargetBPM    = ev.ritTargetBPM;
+        changes[mn].ritTargetDenom  = ev.ritTargetDenom;
+        changes[mn].ritTargetDotted = ev.ritTargetDotted;
+      }
+    }
+    if (ev.atempo) changes[mn].atempo = true;
   }
 
   // End of score: last double-barline measure.
@@ -201,6 +237,127 @@ function parseScore(text) {
       codaJump:  codaJumps[mn]  || false,
       isEnd:     mn === endAt,
     };
+  }
+
+  const warnings = [];     // parse warnings surfaced to user
+
+  // ── Rit/accel span pass ──────────────────────────────────────────────────────
+  // For each measure with ritKind, find the end of the span (next explicit tempo
+  // or a tempo line), compute total denom-units across the span, and attach
+  // ritAccel descriptors to every measure in the span so the scheduler can
+  // interpolate BPM per tick.
+  {
+    // Build sorted list of measures that have any tempo event
+    const tempoMeasures = Object.keys(changes).map(Number).sort((a, b) => a - b);
+
+    for (const startMn of tempoMeasures) {
+      const c = changes[startMn];
+      if (!c.ritKind) continue;
+
+      // startBPM: the tempo in effect AT the rit measure (already baked into measures[])
+      const startMs = measures[startMn];
+      if (!startMs) continue;
+      const startBPM    = startMs.tempoBPM;
+      const startDenom  = startMs.tempoDenom;
+      const startDotted = startMs.tempoDotted;
+
+      // Find end of span: next measure with explicit tempoBPM or atempo
+      let endMn = null;
+      let endBPM = null, endDenom = startDenom, endDotted = startDotted;
+      let isAtempo = false;
+      for (const mn of tempoMeasures) {
+        if (mn <= startMn) continue;
+        const nc = changes[mn];
+        if (nc.atempo) {
+          endMn = mn; isAtempo = true;
+          // a tempo: restore the BPM that was in effect before the rit
+          // That's the BPM of the measure before the rit (already in measures[])
+          const prevMs = measures[startMn]; // startMs carries the pre-rit BPM
+          endBPM    = startBPM; // will snap back; rit interpolates startBPM→ritTarget
+          endDenom  = startDenom;
+          endDotted = startDotted;
+          break;
+        }
+        if (nc.tempoBPM) {
+          endMn     = mn;
+          endBPM    = nc.tempoBPM;
+          endDenom  = nc.tempoDenom  ?? startDenom;
+          endDotted = nc.tempoDotted ?? startDotted;
+          break;
+        }
+      }
+
+      // Determine target BPM: inline on rit line takes priority, else arrival line
+      let targetBPM, targetDenom, targetDotted;
+      if (c.ritTargetBPM) {
+        targetBPM    = c.ritTargetBPM;
+        targetDenom  = c.ritTargetDenom  ?? startDenom;
+        targetDotted = c.ritTargetDotted ?? startDotted;
+      } else if (endBPM !== null && !isAtempo) {
+        targetBPM    = endBPM;
+        targetDenom  = endDenom;
+        targetDotted = endDotted;
+      } else if (c.ritTargetBPM === undefined && isAtempo) {
+        // rit + a tempo but no target — warn and skip
+        warnings.push("m." + startMn + ": 'rit'/'accel' needs a target tempo, e.g. rit 1/4=60");
+        continue;
+      } else {
+        warnings.push("m." + startMn + ": 'rit'/'accel' has no target tempo and no following tempo mark");
+        continue;
+      }
+
+      if (endMn === null) {
+        // If we have an inline target and the score just ends, span to endAt
+        if (c.ritTargetBPM) {
+          endMn = endAt + 1; // span to end of score
+        } else {
+          warnings.push("m." + startMn + ": 'rit'/'accel' has no following tempo mark or 'a tempo'");
+          continue;
+        }
+      }
+
+      // Compute total denom-units across the span [startMn, endMn)
+      // Each measure contributes numerator denom-units (one per denominator note)
+      let totalUnits = 0;
+      const offsets = {}; // mn → denom-units from span start to this measure's downbeat
+      for (let mn = startMn; mn < endMn; mn++) {
+        if (!measures[mn]) continue;
+        offsets[mn] = totalUnits;
+        totalUnits += measures[mn].numerator;
+      }
+      if (totalUnits === 0) continue;
+
+      // Convert startBPM and targetBPM to a common "denom-units per second" rate
+      // so we can interpolate in time regardless of which note value is the beat unit.
+      // We store start/end as BPM in their own units; scheduler will convert per tick.
+      const span = { kind: c.ritKind, startBPM, startDenom, startDotted,
+                     targetBPM, targetDenom, targetDotted, totalUnits, endMn, isAtempo };
+
+      // Attach descriptor to every measure in the span
+      for (let mn = startMn; mn < endMn; mn++) {
+        if (!measures[mn]) continue;
+        measures[mn].ritAccelSpan   = span;
+        measures[mn].ritAccelOffset = offsets[mn];
+      }
+
+      // If span ends at an 'a tempo', restore the pre-rit BPM on that measure.
+      // The forward pass inherited the rit measure's BPM (unchanged); we need
+      // to snap it back to startBPM explicitly.
+      if (isAtempo && measures[endMn]) {
+        measures[endMn].tempoBPM    = startBPM;
+        measures[endMn].tempoDenom  = startDenom;
+        measures[endMn].tempoDotted = startDotted;
+        // Propagate forward until the next explicit tempo change
+        for (let mn = endMn + 1; mn <= endAt; mn++) {
+          if (changes[mn]?.tempoBPM) break; // explicit tempo — stop
+          if (measures[mn]) {
+            measures[mn].tempoBPM    = startBPM;
+            measures[mn].tempoDenom  = startDenom;
+            measures[mn].tempoDotted = startDotted;
+          }
+        }
+      }
+    }
   }
 
   // ── Build playback sequence ────────────────────────────────────────────────
@@ -253,7 +410,6 @@ function parseScore(text) {
   // :|| is a close-repeat only if there is a matching |: open on the stack;
   // otherwise it is just a double-barline end and should not jump back.
   const repeatPairs = {}; // closeMn → openMn
-  const warnings = [];     // parse warnings surfaced to user
   let anyRepeatSeen = false;
   {
     const stack = [];
@@ -752,7 +908,31 @@ function Metronome() {
       if (tick + 1 >= pattern.length) posRef.current = { seqIdx: seqIdx + 1, tick: 0 };
       else posRef.current = { seqIdx, tick: tick + 1 };
 
-      nextTickTimeRef.current += tickData.durationUnits * oneDenomUnitSec(mState, tempoScaleRef.current);
+      // Compute effective BPM for this tick — interpolated if in a rit/accel span
+      let effectiveMState = mState;
+      if (mState.ritAccelSpan) {
+        const span = mState.ritAccelSpan;
+        // tick within this measure = tickIdx; total ticks = pattern.length
+        // denom-units elapsed within this measure up to this tick:
+        let unitsInMeasure = 0;
+        for (let ti = 0; ti < tickIdx; ti++) unitsInMeasure += pattern[ti].durationUnits;
+        const unitOffset = mState.ritAccelOffset + unitsInMeasure;
+        const fraction   = Math.min(1, unitOffset / span.totalUnits);
+        // Convert both endpoints to denom-units/sec rate, interpolate, convert back to BPM
+        const dotS = span.startDotted  ? 1.5 : 1;
+        const dotT = span.targetDotted ? 1.5 : 1;
+        // Seconds per denom-unit at start and target (using score denom, not beat unit)
+        const secPerUnitStart  = (span.startDenom  / mState.denominator) * (60 / (span.startBPM  * tempoScaleRef.current * dotS));
+        const secPerUnitTarget = (span.targetDenom / mState.denominator) * (60 / (span.targetBPM * tempoScaleRef.current * dotT));
+        const secPerUnit = secPerUnitStart + (secPerUnitTarget - secPerUnitStart) * fraction;
+        // Build a synthetic mState that oneDenomUnitSec returns our interpolated rate
+        effectiveMState = { ...mState, _ritSecPerUnit: secPerUnit };
+      }
+      nextTickTimeRef.current += tickData.durationUnits * (
+        effectiveMState._ritSecPerUnit !== undefined
+          ? effectiveMState._ritSecPerUnit
+          : oneDenomUnitSec(mState, tempoScaleRef.current)
+      );
     }
   }, []);
 
