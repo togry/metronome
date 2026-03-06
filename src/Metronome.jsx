@@ -68,7 +68,7 @@ export default function Metronome() {
 
   // ── Scheduler refs ─────────────────────────────────────────────────────────
   const audioCtxRef        = useRef(null);
-  const schedulerRef       = useRef(null);
+
   const posRef             = useRef({ seqIdx: 0, tick: 0 });
   const nextTickTimeRef    = useRef(0);
   const isPlayingRef       = useRef(false);
@@ -117,7 +117,8 @@ export default function Metronome() {
     const ctx = audioCtxRef.current;
     if (!ctx || !isPlayingRef.current) return;
     const { measures, seq } = parsedRef.current;
-    const scheduleUntil = ctx.currentTime + 0.20;
+    // 150ms lookahead: long enough that the rAF-driven scheduler never falls behind.
+    const scheduleUntil = ctx.currentTime + 0.15;
 
     while (nextTickTimeRef.current < scheduleUntil) {
       const { seqIdx, tick } = posRef.current;
@@ -199,7 +200,6 @@ export default function Metronome() {
 
   useEffect(() => {
     if (!playing) {
-      clearInterval(schedulerRef.current);
       isPlayingRef.current = false;
       setCountingIn(false);
       setCountInRemaining(0);
@@ -207,14 +207,12 @@ export default function Metronome() {
     }
     if (skipPlayEffectRef.current) {
       skipPlayEffectRef.current = false;
-      return () => clearInterval(schedulerRef.current);
+      return;
     }
     const ctx = getAudioCtx();
     nextTickTimeRef.current = ctx.currentTime + 0.05;
     isPlayingRef.current    = true;
     scheduleNext();
-    schedulerRef.current = setInterval(scheduleNext, 50);
-    return () => clearInterval(schedulerRef.current);
   }, [playing, scheduleNext]);
 
   // ── rAF visual loop ────────────────────────────────────────────────────────
@@ -225,7 +223,21 @@ export default function Metronome() {
     const FLASH_COLORS_DARK  = { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' };
     const FLASH_COLORS_LIGHT = { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
 
-    function applyVisual({ measure: capM, beat: capT, weight }) {
+    // Dim all pattern dots unconditionally — don't rely on _active flag
+    // since React ref callbacks reset _active without updating DOM styles.
+    function dimAllDots() {
+      const dark = themeRef.current === 'dark';
+      for (const dot of patternDotsRef.current) {
+        if (!dot) continue;
+        dot._active          = false;
+        const col            = dot._col;
+        dot.style.background = col + (dark ? '33' : '55');
+        dot.style.boxShadow  = 'none';
+        dot.style.border     = `1.5px solid ${col}${dark ? '77' : '99'}`;
+      }
+    }
+
+    function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
       const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
       const isDark      = themeRef.current === 'dark';
       const mobileNow   = mobileRef.current;
@@ -238,14 +250,13 @@ export default function Metronome() {
       }
 
       currentBeatRef.current = capT;
-      const prevFlash        = flashRef.current;
       flashRef.current       = capFlash;
 
-      // Header flash dots
+      // Header flash dots — always update all three so inactive ones dim
       for (const key of ['measure', 'primary', 'unit']) {
         const el = flashDotsRef.current[key];
         if (!el) continue;
-        const active = key === capFlash;
+        const active = lightDot && key === capFlash;
         const col    = flashColors[key];
         const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
         el.style.width      = sz;
@@ -256,40 +267,38 @@ export default function Metronome() {
         if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
       }
 
-      // Pattern visualizer dots — dim previous, light up new
-      const dots  = patternDotsRef.current;
-      const dark  = themeRef.current === 'dark';
-      if (prevFlash !== null) {
-        for (let i = 0; i < dots.length; i++) {
-          const dot = dots[i];
-          if (!dot || !dot._active) continue;
-          dot._active          = false;
-          const col            = dot._col;
-          dot.style.background = col + (dark ? '33' : '55');
-          dot.style.boxShadow  = 'none';
-          dot.style.border     = `1.5px solid ${col}${dark ? '77' : '99'}`;
+      // Pattern dots — always dim everything first, then optionally light capT
+      dimAllDots();
+      if (lightDot) {
+        const activeDot = patternDotsRef.current[capT];
+        if (activeDot) {
+          activeDot._active          = true;
+          const col                  = activeDot._col;
+          activeDot.style.background = col;
+          activeDot.style.boxShadow  = `0 0 14px ${col}, 0 0 6px ${col}`;
+          activeDot.style.border     = `1.5px solid ${col}ff`;
         }
-      }
-      const activeDot = dots[capT];
-      if (activeDot) {
-        activeDot._active          = true;
-        const col                  = activeDot._col;
-        activeDot.style.background = col;
-        activeDot.style.boxShadow  = `0 0 14px ${col}, 0 0 6px ${col}`;
-        activeDot.style.border     = `1.5px solid ${col}ff`;
       }
     }
 
     function rafLoop() {
       const ctx = audioCtxRef.current;
+
+      // Run the audio scheduler every frame — replaces setInterval.
+      // rAF fires ~every 16ms which is well within the 150ms lookahead.
+      if (isPlayingRef.current) scheduleNext();
+
       if (ctx && pendingVisualRef.current?.length) {
         const now   = ctx.currentTime;
         const queue = pendingVisualRef.current;
         let i = 0;
         while (i < queue.length && queue[i].fireAt <= now) i++;
         if (i > 0) {
-          // Apply only the last due event (skip stale intermediate ticks if we fell behind)
-          applyVisual(queue[i - 1]);
+          // For intermediate ticks (between frames): update state + dim but don't
+          // light a dot — lighting then immediately dimming causes a visible burst.
+          // Only the last due event gets the full lit treatment.
+          for (let j = 0; j < i - 1; j++) applyVisual(queue[j], false);
+          applyVisual(queue[i - 1], true);
           pendingVisualRef.current = queue.slice(i);
         }
       }
@@ -384,7 +393,6 @@ export default function Metronome() {
       nextTickTimeRef.current   = scoreStartT;
       isPlayingRef.current      = true;
       scheduleNext();
-      schedulerRef.current      = setInterval(scheduleNext, 50);
       skipPlayEffectRef.current = true;
       setPlaying(true);
     } else {
