@@ -28,8 +28,13 @@ export default function Metronome() {
   // ── Playback state ─────────────────────────────────────────────────────────
   const [playing,        setPlaying]        = useState(false);
   const [currentMeasure, setCurrentMeasure] = useState(1);
-  const [currentBeat,    setCurrentBeat]    = useState(0);
-  const [flash,          setFlash]          = useState(null);
+  // currentBeat and flash drive visuals that update every tick. Bypassing React
+  // state for these avoids a full component re-render on every click — instead
+  // we mutate DOM nodes directly via refs.
+  const currentBeatRef   = useRef(0);
+  const flashRef         = useRef(null);   // 'measure' | 'primary' | 'unit' | null
+  const flashDotsRef     = useRef({});     // { measure, primary, unit } → DOM element
+  const patternDotsRef   = useRef([]);     // array of DOM elements, one per beat dot
   const [startMeasure,   setStartMeasure]   = useState(1);
   const [previewMeasure, setPreviewMeasure] = useState(1);
   const [loopStart,      setLoopStart]      = useState(null);
@@ -68,6 +73,10 @@ export default function Metronome() {
   const nextTickTimeRef    = useRef(0);
   const isPlayingRef       = useRef(false);
   const parsedRef          = useRef(parsed);          parsedRef.current = parsed;
+  // Pending visual update — written by scheduler, consumed by rAF loop
+  // { measure, beat, weight, fireAt } where fireAt is ctx.currentTime value
+  const pendingVisualRef   = useRef(null);
+  const rafRef             = useRef(null);
   const subdivIdxRef       = useRef(subdivIdx);       subdivIdxRef.current = subdivIdx;
   const tempoScaleRef      = useRef(tempoScale / 100); tempoScaleRef.current = tempoScale / 100;
   const btLatencyRef       = useRef(btLatency / 1000); btLatencyRef.current = btLatency / 1000;
@@ -86,6 +95,9 @@ export default function Metronome() {
   const countInBeatsRef    = useRef(countInBeats);   countInBeatsRef.current = countInBeats;
   const countInDenomRef    = useRef(countInDenom);   countInDenomRef.current = countInDenom;
   const totalMeasuresRef   = useRef(0);
+  const currentMeasureRef  = useRef(1);
+  const themeRef           = useRef(theme);          themeRef.current = theme;
+  const mobileRef          = useRef(mobile);         mobileRef.current = mobile;
 
   // Keep previewMeasure in sync while playing
   useEffect(() => {
@@ -105,7 +117,7 @@ export default function Metronome() {
     const ctx = audioCtxRef.current;
     if (!ctx || !isPlayingRef.current) return;
     const { measures, seq } = parsedRef.current;
-    const scheduleUntil = ctx.currentTime + 0.15;
+    const scheduleUntil = ctx.currentTime + 0.20;
 
     while (nextTickTimeRef.current < scheduleUntil) {
       const { seqIdx, tick } = posRef.current;
@@ -167,14 +179,16 @@ export default function Metronome() {
       g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
       osc.start(tAudio); osc.stop(tAudio + 0.07);
 
-      // UI sync — visuals fire at t (when sound is heard after BT latency)
-      const delay = Math.max(0, (t - ctx.currentTime) * 1000);
-      const [capM, capT, capW] = [measure, tickIdx, tickData.weight];
-      setTimeout(() => {
-        setCurrentMeasure(capM);
-        setCurrentBeat(capT);
-        setFlash(capW >= 3 ? 'measure' : capW >= 2 ? 'primary' : 'unit');
-      }, delay);
+      // Queue visual update — consumed by the rAF loop.
+      // Storing fireAt (audio clock value) lets the rAF loop fire with
+      // sub-millisecond accuracy instead of relying on setTimeout jitter.
+      if (!pendingVisualRef.current) pendingVisualRef.current = [];
+      pendingVisualRef.current.push({
+        measure,
+        beat:    tickIdx,
+        weight:  tickData.weight,
+        fireAt:  t,   // ctx.currentTime value at which visuals should fire
+      });
 
       if (tick + 1 >= pattern.length) posRef.current = { seqIdx: seqIdx + 1, tick: 0 };
       else posRef.current = { seqIdx, tick: tick + 1 };
@@ -203,6 +217,103 @@ export default function Metronome() {
     return () => clearInterval(schedulerRef.current);
   }, [playing, scheduleNext]);
 
+  // ── rAF visual loop ────────────────────────────────────────────────────────
+  // Polls pendingVisualRef every animation frame (~16ms). When ctx.currentTime
+  // reaches a queued event's fireAt time, DOM mutations are applied immediately —
+  // no setTimeout jitter on the main thread.
+  useEffect(() => {
+    const FLASH_COLORS_DARK  = { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' };
+    const FLASH_COLORS_LIGHT = { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
+
+    function applyVisual({ measure: capM, beat: capT, weight }) {
+      const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
+      const isDark      = themeRef.current === 'dark';
+      const mobileNow   = mobileRef.current;
+      const flashColors = isDark ? FLASH_COLORS_DARK : FLASH_COLORS_LIGHT;
+
+      // Coarse state update — re-render only when measure actually changes
+      if (capM !== currentMeasureRef.current) {
+        currentMeasureRef.current = capM;
+        setCurrentMeasure(capM);
+      }
+
+      currentBeatRef.current = capT;
+      const prevFlash        = flashRef.current;
+      flashRef.current       = capFlash;
+
+      // Header flash dots
+      for (const key of ['measure', 'primary', 'unit']) {
+        const el = flashDotsRef.current[key];
+        if (!el) continue;
+        const active = key === capFlash;
+        const col    = flashColors[key];
+        const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
+        el.style.width      = sz;
+        el.style.height     = sz;
+        el.style.background = active ? col : col + '28';
+        el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
+        const label = el.parentElement?.nextElementSibling;
+        if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
+      }
+
+      // Pattern visualizer dots — dim previous, light up new
+      const dots  = patternDotsRef.current;
+      const dark  = themeRef.current === 'dark';
+      if (prevFlash !== null) {
+        for (let i = 0; i < dots.length; i++) {
+          const dot = dots[i];
+          if (!dot || !dot._active) continue;
+          dot._active          = false;
+          const col            = dot._col;
+          dot.style.background = col + (dark ? '33' : '55');
+          dot.style.boxShadow  = 'none';
+          dot.style.border     = `1.5px solid ${col}${dark ? '77' : '99'}`;
+        }
+      }
+      const activeDot = dots[capT];
+      if (activeDot) {
+        activeDot._active          = true;
+        const col                  = activeDot._col;
+        activeDot.style.background = col;
+        activeDot.style.boxShadow  = `0 0 14px ${col}, 0 0 6px ${col}`;
+        activeDot.style.border     = `1.5px solid ${col}ff`;
+      }
+    }
+
+    function rafLoop() {
+      const ctx = audioCtxRef.current;
+      if (ctx && pendingVisualRef.current?.length) {
+        const now   = ctx.currentTime;
+        const queue = pendingVisualRef.current;
+        let i = 0;
+        while (i < queue.length && queue[i].fireAt <= now) i++;
+        if (i > 0) {
+          // Apply only the last due event (skip stale intermediate ticks if we fell behind)
+          applyVisual(queue[i - 1]);
+          pendingVisualRef.current = queue.slice(i);
+        }
+      }
+      rafRef.current = requestAnimationFrame(rafLoop);
+    }
+
+    rafRef.current = requestAnimationFrame(rafLoop);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      // Dim all dots on unmount
+      for (const el of Object.values(flashDotsRef.current)) {
+        if (el) el.style.boxShadow = 'none';
+      }
+      const dark = themeRef.current === 'dark';
+      for (const dot of patternDotsRef.current) {
+        if (!dot || !dot._active) continue;
+        dot._active          = false;
+        dot.style.background = dot._col + (dark ? '33' : '55');
+        dot.style.boxShadow  = 'none';
+        dot.style.border     = `1.5px solid ${dot._col}${dark ? '77' : '99'}`;
+      }
+    };
+  }, []);
+
   // ── Play / Stop ────────────────────────────────────────────────────────────
   function handlePlay() {
     if (playing) { setPlaying(false); return; }
@@ -211,10 +322,11 @@ export default function Metronome() {
     const { seq }   = parsedRef.current;
     const startIdx  = Math.max(0, seq.findIndex(mn => mn >= realStart));
     posRef.current  = { seqIdx: startIdx, tick: 0 };
+    currentMeasureRef.current = seq[startIdx] ?? realStart;
     setCurrentMeasure(seq[startIdx] ?? realStart);
     setPreviewMeasure(seq[startIdx] ?? realStart);
-    setCurrentBeat(0);
-    setFlash(null);
+    currentBeatRef.current = 0;
+    flashRef.current = null;
 
     if (countInEnabledRef.current) {
       const { measures } = parsedRef.current;
@@ -242,7 +354,24 @@ export default function Metronome() {
         setTimeout(() => {
           setCountingIn(true);
           setCountInRemaining(capRemaining);
-          setFlash(i === 0 ? 'measure' : 'primary');
+          const capFlash = i === 0 ? 'measure' : 'primary';
+          flashRef.current = capFlash;
+          const isDark = themeRef.current === 'dark';
+          const flashColors = isDark
+            ? { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' }
+            : { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
+          const mobileNow = mobileRef.current;
+          for (const key of ['measure', 'primary', 'unit']) {
+            const el = flashDotsRef.current[key];
+            if (!el) continue;
+            const active = key === capFlash;
+            const col = flashColors[key];
+            const sz = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
+            el.style.width      = sz;
+            el.style.height     = sz;
+            el.style.background = active ? col : col + '28';
+            el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
+          }
         }, Math.max(0, (t - ctx.currentTime) * 1000));
       }
 
@@ -333,7 +462,7 @@ export default function Metronome() {
         const { seq: s } = parsedRef.current;
         const idx = Math.max(0, s.findIndex(m => m >= mn));
         posRef.current = { seqIdx: idx, tick: 0 };
-        setCurrentMeasure(s[idx] ?? mn); setCurrentBeat(0);
+        setCurrentMeasure(s[idx] ?? mn); currentBeatRef.current = 0;
       }
     }
   }
@@ -396,7 +525,7 @@ export default function Metronome() {
         const { seq: s } = parsedRef.current;
         const idx = Math.max(0, s.findIndex(mn => mn >= anchorMn));
         posRef.current = { seqIdx: idx, tick: 0 };
-        setCurrentMeasure(s[idx] ?? anchorMn); setCurrentBeat(0);
+        setCurrentMeasure(s[idx] ?? anchorMn); currentBeatRef.current = 0;
       }
     }
     dragStateRef.current = null;
@@ -460,7 +589,7 @@ export default function Metronome() {
           const { seq: s } = parsedRef.current;
           const idx = Math.max(0, s.findIndex(mn => mn >= newMn));
           posRef.current = { seqIdx: idx, tick: 0 };
-          setCurrentMeasure(s[idx] ?? newMn); setCurrentBeat(0);
+          setCurrentMeasure(s[idx] ?? newMn); currentBeatRef.current = 0;
         }
       }
     }
@@ -473,7 +602,13 @@ export default function Metronome() {
   const targetDenom    = SUBDIV_OPTIONS[subdivIdx].targetDenom;
   const previewMs      = measures[previewMeasure] || measures[startMeasure] || measures[1];
   const previewPattern = previewMs ? getBeatPattern(previewMs, targetDenom) : [];
-  const activeBeat     = playing && previewMeasure === currentMeasure ? currentBeat : -1;
+  // Reset the pattern dot refs array whenever the pattern length changes
+  // (new time sig, new subdivide setting) so stale refs don't linger.
+  if (patternDotsRef.current.length !== previewPattern.length) {
+    patternDotsRef.current = new Array(previewPattern.length).fill(null);
+  }
+  // activeBeat is only used for the initial render; the DOM is updated directly during playback.
+  const activeBeat     = -1;
   const dispMn         = playing ? currentMeasure : previewMeasure;
 
   let lastRM = null;
@@ -577,17 +712,19 @@ export default function Metronome() {
           ].map(({ key, col, label }) => (
             <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <div style={{ width: mobile ? 22 : 24, height: mobile ? 22 : 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{
-                  width:     flash === key ? (mobile ? 20 : 22) : (mobile ? 11 : 13),
-                  height:    flash === key ? (mobile ? 20 : 22) : (mobile ? 11 : 13),
-                  borderRadius: '50%',
-                  background: flash === key ? col : col + '28',
-                  border:    `1px solid ${col}55`,
-                  transition: 'all 0.05s',
-                  boxShadow: flash === key ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none',
-                }} />
+                <div
+                  ref={el => { if (el) flashDotsRef.current[key] = el; }}
+                  style={{
+                    width: mobile ? '11px' : '13px',
+                    height: mobile ? '11px' : '13px',
+                    borderRadius: '50%',
+                    background: col + '28',
+                    border: `1px solid ${col}55`,
+                    boxShadow: 'none',
+                  }}
+                />
               </div>
-              {!mobile && <div style={{ fontSize: 8, color: flash === key ? col : C.textFaint, letterSpacing: 1 }}>{label}</div>}
+              {!mobile && <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 1 }}>{label}</div>}
             </div>
           ))}
         </div>
@@ -802,23 +939,33 @@ export default function Metronome() {
               })()}
               {loopEnd !== null && <span style={{ color: C.orange }}>↺ m.{loopStart ?? startMeasure}–{loopEnd - 1}</span>}
             </div>
-            <div style={{ display: 'flex', gap: mobile ? 6 : 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: mobile ? 6 : 5, flexWrap: 'wrap', alignItems: 'center' }}
+              ref={() => { patternDotsRef.current.length = previewPattern.length; }}
+            >
               {previewPattern.map((tick, i) => {
-                const isActive = i === activeBeat;
                 const col = tick.weight === 3 ? C.measure : tick.weight === 2 ? C.primary : tick.weight === 1 ? C.unit : C.sub;
                 const sz  = mobile
                   ? (tick.weight === 3 ? 34 : tick.weight === 2 ? 26 : tick.weight === 1 ? 18 : 11)
                   : (tick.weight === 3 ? 30 : tick.weight === 2 ? 22 : tick.weight === 1 ? 15 : 9);
                 return (
-                  <div key={i} style={{
-                    width: sz, height: sz,
-                    borderRadius: tick.weight >= 2 ? 4 : '50%',
-                    background: isActive ? col : col + (theme === 'light' ? '55' : '33'),
-                    border: `1.5px solid ${col}${isActive ? 'ff' : (theme === 'light' ? '99' : '77')}`,
-                    boxShadow: isActive ? `0 0 14px ${col}, 0 0 6px ${col}` : 'none',
-                    transition: 'box-shadow 0.04s, background 0.04s',
-                    flexShrink: 0,
-                  }} />
+                  <div
+                    key={i}
+                    ref={el => {
+                      if (el) {
+                        patternDotsRef.current[i] = el;
+                        el._col    = col;
+                        el._active = false;
+                      }
+                    }}
+                    style={{
+                      width: sz, height: sz,
+                      borderRadius: tick.weight >= 2 ? 4 : '50%',
+                      background: col + (theme === 'light' ? '55' : '33'),
+                      border: `1.5px solid ${col}${theme === 'light' ? '99' : '77'}`,
+                      boxShadow: 'none',
+                      flexShrink: 0,
+                    }}
+                  />
                 );
               })}
             </div>

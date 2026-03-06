@@ -113,7 +113,7 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 15, color: C.gold, letterSpacing: 3, fontWeight: 'bold' }}>♩ CONDUCTOR — HELP</div>
+          <div style={{ fontSize: 15, color: C.gold, letterSpacing: 3, fontWeight: 'bold' }}>♩ METRONOMICON — HELP</div>
           <button onClick={onClose} style={{
             background: 'transparent', border: `1px solid ${C.border}`,
             color: C.textDim, borderRadius: 4, padding: '4px 10px',

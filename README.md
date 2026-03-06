@@ -1,16 +1,40 @@
-# Conductor — Score-Aware Metronome
+# Metronomicon — Score-Aware Metronome
 
 A metronome that follows a whole piece, not just a single time signature.
-Handles tempo changes, odd meters, rehearsal marks, repeats, and loops —
-all defined in a simple text format.
+Handles tempo changes, odd meters, rehearsal marks, repeats, ritardando,
+accelerando, and practice loops — all defined in a simple text format.
+
+Live: https://togry.github.io/metronome/
 
 ---
 
 ## Quick Start
 
-Open `conductor.html` in any modern browser. No installation required.
-An internet connection is needed on first load to fetch the React library
-(~300 KB, then cached for offline use).
+```bash
+npm install
+npm run dev        # local dev server at http://localhost:5173
+npm run build      # produces dist/index.html — single self-contained file
+```
+
+The built `dist/index.html` can be opened directly in a browser with no
+server required.
+
+---
+
+## Practice Loop — Quick Example
+
+The simplest use: list the bars you want to drill, with no end marker.
+The score loops back to m.1 continuously until you stop it.
+
+```
+1| 4/4, 1/4=120
+2| 7/8 (2+2+3)
+3| 4/4
+4| 5/4
+```
+
+That's it — four bars cycling forever. Add a time signature, tempo, or
+grouping only on lines where something changes.
 
 ---
 
@@ -78,36 +102,45 @@ For odd meters, specify how beats are grouped within the measure:
 | `8/8` | `(3+3+2)` | 3 beats: ♩. ♩. ♩ |
 
 Groupings are remembered per time signature. If you write `7/8 (2+2+3)` at
-measure 4 and bare `7/8` at measure 19 (even after intervening time signatures),
-measure 19 automatically inherits `(2+2+3)`. A grouping-only line like
-`19| (3+2+2)` changes the subdivision without re-stating the time signature,
-and updates the remembered grouping for future bare references.
+measure 4 and bare `7/8` at measure 19, measure 19 automatically inherits
+`(2+2+3)`.
 
 ### Tempo
 
 Written as `1/note=BPM`, e.g. `1/4=120` means quarter note = 120 bpm.
 A dotted note value can be written with a period: `1/4.=60` means dotted
-quarter = 60 bpm, the natural way to express compound meter tempos like
-6/8 and 12/8. The tempo stays in effect until the next tempo marking.
+quarter = 60 bpm, the natural way to express compound meter tempos.
+The tempo stays in effect until the next tempo marking.
+
+### Rit / Accel
+
+Add `rit` or `accel` with a target tempo to begin a smooth tempo curve.
+The curve spans to the next explicit tempo mark or `a tempo`.
+
+```
+1| 4/4 1/4=160
+3| rit 1/4=60          rit from m.3; arrive at 60 BPM
+7| 1/4=60 accel 1/4=160  new base tempo, then accelerate
+12| 1/4=160            arrival; accel spreads across m.7-11
+```
+
+Use `a tempo` to snap back to the tempo that was in effect before the rit/accel:
+
+```
+4| rit 1/4=60
+5| a tempo             restores the pre-rit BPM
+```
+
+Tempo is interpolated smoothly on every beat, not just once per bar.
 
 ### Repeat notation
 
-The score is pre-expanded at parse time into a flat playback sequence, so
-all repeat-related structures affect only what is heard — the measure numbers
-in the score are always the written (not played) numbers.
+The score is pre-expanded at parse time into a flat playback sequence.
 
 **Simple repeats** — `|:` opens a repeat section, `:|` closes it. The section
-plays twice. A `:|` at the very start of the score with no prior `|:` implicitly
-repeats from m.1.
+plays twice.
 
 **Single-measure repeat** — `|:|` on a single line repeats just that measure.
-
-**Back-to-back sections** — use `:|` then `||:` on consecutive lines:
-
-```
-8:|      close first repeat
-9||:     double barline + open second repeat
-```
 
 **D.C. / D.S. al Fine / al Coda**
 
@@ -118,39 +151,18 @@ repeats from m.1.
 | `DS al Fine` | Jump to `$` (segno); stop at `Fine` |
 | `DS al Coda` | Jump to `$`; at `@` jump to the `Coda` section |
 
-Place `$` (segno) and `@` (coda jump point) as standalone tokens on their
-respective measure lines. The `Coda` section is skipped on the first pass
-when a D.C./D.S. al Coda is present; it is entered only via the jump.
-
-**End of score** — the last `||` or matched `:|` in the score ends playback.
-Use `||` (plain double barline) to end cleanly. `:||` is only valid when
-there is a matching `|:` earlier; an unmatched `:||` is flagged as a warning.
-
-### Parse warnings
-
-Structural problems are shown below the score editor in amber after parsing:
-
-- `:|` after any prior repeat with no matching `|:`
-- `:||` with no matching `|:` anywhere
-
-Warnings do not prevent playback; the parser falls back to reasonable behaviour
-(an unmatched `:|` with no prior repeats repeats from m.1).
+**End of score** — the last `||` or matched `:|` ends playback. Omit it
+entirely for a practice loop that repeats from m.1.
 
 ### Comments and blank lines
 
-Anything from `#` or `//` to the end of a line is treated as a comment and
-ignored. Comments can appear on their own line or after the content on any
-line. Blank lines are also ignored. Use them freely to annotate your score:
+Anything from `#` or `//` to the end of a line is a comment. Blank lines
+are ignored.
 
 ```
 # Symphony No. 5 — rehearsal score
-# ♩=120 throughout except [C]
-
 1|: 4/4, 1/4=120
-
-# Transition
-16:|| [A]
-17||: 6/8, 1/4.=80
+16:|| [A]              # section A ends here
 ```
 
 ---
@@ -159,98 +171,87 @@ line. Blank lines are also ignored. Use them freely to annotate your score:
 
 ### Playback
 
-- **▶ PLAY / ◼ STOP** — start or stop the metronome
-- **COUNT IN** — checkbox to enable a count-in before playback starts;
-  choose 2, 3, or 4 beats of quarters or eighths
-- **SUBDIVIDE** — what level of clicks to hear:
-  - *Primary beats* — one click per beat group (e.g. 3 clicks in 7/8)
-  - *Subdivided to 4ths / 8ths / 16ths / 32nds* — adds sub-clicks within
-    each beat, but only where the beat divides evenly into that note value
-- **REHEARSAL TEMPO** — scale the tempo from 10–150% of written speed;
-  actual BPM shown next to the slider
-- **☀ / 🌙** — toggle between dark (night) and light (daylight) colour palettes
+- **▶ / ◼** — play and stop
+- **COUNT IN** — checkbox to enable a count-in; choose 2, 3, or 4 beats of
+  quarters or eighths
+- **SUBDIVIDE** — primary beats only, or subdivided to 4ths / 8ths / 16ths /
+  32nds (sub-clicks added only where the beat divides evenly)
+- **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider
+- **BT** — Bluetooth latency offset (0–500 ms); compensates for wireless
+  headphone delay so clicks and visual flashes align with what you hear
+- **☀ / 🌙** — toggle between dark and daylight colour palettes
 
 ### Click sounds
 
-| Colour | Sound | Meaning |
-|--------|-------|---------|
-| 🔴 Red | High pitch | Measure downbeat |
-| 🟡 Amber | Mid pitch | Primary beat |
-| 🔵 Cyan | Lower pitch | Subdivision click |
+| Colour | Meaning |
+|--------|---------|
+| 🔴 Red | Measure downbeat |
+| 🟡 Amber | Primary beat |
+| 🔵 Cyan | Subdivision click |
 
 ### Keyboard shortcuts
 
 | Key | Action |
 |-----|--------|
 | `Space` | Play / Stop |
-| `←` / `→` | Move cursor one measure; loop is preserved |
+| `←` / `→` | Move cursor one measure |
 | `Shift+→` | Start a loop from cursor, or extend existing loop end |
 | `Shift+←` | Shrink loop end, or start a loop ending before cursor |
 
 Arrow keys and Space are ignored while typing in the score editor.
 
-The cursor (`startMeasure`) and the loop region are independent. Navigate
-freely with plain arrows without disturbing the loop; use Shift+arrows to
-define or adjust it. A Shift+arrow from outside the current loop's anchor
-clears the old loop and starts a fresh one from the cursor position.
-
 ### Timeline
 
-The horizontal bar shows the full piece with rehearsal marks, time signature
-changes, and repeat/navigation markers labelled. It scrolls horizontally
-when the piece is long. Double barlines (`||`, `:||`) are shown as heavier
-lines; segno (`$`), coda jump (`@`), and directives are shown in colour.
+Shows the full piece with rehearsal marks, time signature changes, and
+barline markers. Scrolls horizontally for long pieces.
 
-**Desktop:**
-- **Click** anywhere to set the cursor (start position)
-- **Drag** to define a loop region (highlighted in orange)
-- **Shift-click** to set the loop end point independently
-- The playhead moves in real time; clicking while playing jumps immediately
+**Desktop:** click to set cursor · drag to define loop · shift-click to set
+loop end · playhead tracks position in real time.
 
-**Mobile / touchscreen:**
-- **Tap** to set the cursor
-- **Double-tap then drag** to define a loop region (avoids conflict with scrolling)
-- **Two-finger drag** to scroll the timeline horizontally
+**Mobile:** tap to set cursor · double-tap then drag to define loop ·
+two-finger drag to scroll.
 
-### Loops and repeats
+### Loops
 
-When a loop region is defined, only the measures within that region play and
-repeat. Repeat sections (`|: … :|`) that fall **completely inside** the loop
-are honoured — they play twice on every loop cycle. Repeats that **span a
-loop boundary** are ignored; only the measures within the loop window play.
-
-The loop end is **inclusive** — a loop set from m.6 to m.9 plays m.6, 7, 8,
-and 9, then wraps back to m.6.
+When a loop region is defined, only measures within that region play and
+repeat. Repeat sections fully inside the loop are honoured (play twice per
+cycle). The loop end is inclusive.
 
 ### Measure grid
 
-Click or tap any cell to set the cursor. The currently playing measure is
-highlighted in gold; the loop region in orange. Tiles show the measure number,
-time signature, grouping, and any structural markers (`$`, `@`, directives).
-
-### Mobile use
-
-On small screens the score editor is hidden by default. Tap **SCORE** in the
-header to open it as a full-screen overlay; tap **PARSE SCORE** to apply and
-return. The measures grid scrolls vertically with a normal swipe.
+Click any tile to set the cursor. Active measure highlighted in gold; loop
+region in orange. Tiles show time signature, grouping, and structural
+markers (`$`, `@`, directives).
 
 ---
 
 ## Hosting
 
-The app is a single HTML file and can be hosted anywhere that serves static files.
+The built `dist/index.html` is a single self-contained file — no assets
+folder, no server needed.
 
-**Netlify (quickest):** drag `conductor.html` onto [app.netlify.com/drop](https://app.netlify.com/drop) and get an instant URL.
+**GitHub Pages (this repo):** pushing to `main` triggers a GitHub Actions
+workflow that runs `npm run build` and deploys `dist/` automatically.
 
-**GitHub Pages:** rename the file to `index.html`, push to a repository, and
-enable Pages under Settings → Pages → Deploy from branch.
+**Netlify:** drag `dist/index.html` onto [app.netlify.com/drop](https://app.netlify.com/drop).
 
-**GitLab Pages:** same as GitHub, but also add a `.gitlab-ci.yml`:
-```yaml
-pages:
-  script:
-    - mkdir public
-    - cp index.html public/
-  artifacts:
-    paths: [public]
+**Anywhere else:** copy `dist/index.html` to any static file host.
+
+---
+
+## Development
+
+```
+src/
+  parser.js          score text → measures[], seq[], warnings
+  beatModel.js       beat patterns, tempo math (pure functions)
+  timeline.js        timeline event list, loop seq bounds
+  constants.js       palettes, subdivision options, example scores
+  Metronome.jsx      top-level component: all state, scheduler, layout
+  main.jsx           React entry point
+  components/
+    ScorePanel.jsx   score editor, clear/paste/parse buttons
+    HelpModal.jsx    in-app help overlay
+    Timeline.jsx     timeline strip with markers and playhead
+    MeasureGrid.jsx  measure tile grid
 ```
