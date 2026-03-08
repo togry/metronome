@@ -45,11 +45,12 @@ export default function Metronome() {
   const [tempoScale,     setTempoScale]     = useState(100);
   const [btLatency,      setBtLatency]      = useState(0);
   const [showBtSlider,   setShowBtSlider]   = useState(false);
-  const [countInEnabled, setCountInEnabled] = useState(false);
-  const [countInBeats,   setCountInBeats]   = useState(4);
-  const [countInDenom,   setCountInDenom]   = useState(4);
-  const [countingIn,     setCountingIn]     = useState(false);
-  const [countInRemaining, setCountInRemaining] = useState(0);
+  const [countInEnabled,    setCountInEnabled]    = useState(false);
+  const [countInOnRepeat,   setCountInOnRepeat]   = useState(false);
+  const [countInBeats,      setCountInBeats]      = useState(4);
+  const [countInDenom,      setCountInDenom]      = useState(4);
+  const [countingIn,        setCountingIn]        = useState(false);
+  const [countInRemaining,  setCountInRemaining]  = useState(0);
 
   // ── UI ─────────────────────────────────────────────────────────────────────
   const [showHelp,  setShowHelp]  = useState(false);
@@ -77,6 +78,8 @@ export default function Metronome() {
   // { measure, beat, weight, fireAt } where fireAt is ctx.currentTime value
   const pendingVisualRef   = useRef(null);
   const rafRef             = useRef(null);
+  // Deferred loop restart: { seqIdx, resumeAt (audio time) } — set when count-in on repeat
+  const pendingRestartRef  = useRef(null);
   const subdivIdxRef       = useRef(subdivIdx);       subdivIdxRef.current = subdivIdx;
   const tempoScaleRef      = useRef(tempoScale / 100); tempoScaleRef.current = tempoScale / 100;
   const btLatencyRef       = useRef(btLatency / 1000); btLatencyRef.current = btLatency / 1000;
@@ -92,6 +95,7 @@ export default function Metronome() {
   const skipPlayEffectRef  = useRef(false);
   const playBtnRef         = useRef(null);
   const countInEnabledRef  = useRef(countInEnabled); countInEnabledRef.current = countInEnabled;
+  const countInOnRepeatRef = useRef(countInOnRepeat); countInOnRepeatRef.current = countInOnRepeat;
   const countInBeatsRef    = useRef(countInBeats);   countInBeatsRef.current = countInBeats;
   const countInDenomRef    = useRef(countInDenom);   countInDenomRef.current = countInDenom;
   const totalMeasuresRef   = useRef(0);
@@ -135,7 +139,14 @@ export default function Metronome() {
           loopSeqStartRef._loopE  = loopE;
         }
         if (seqIdx >= loopSeqEndRef.current) {
-          posRef.current = { seqIdx: loopSeqStartRef.current, tick: 0 };
+          const restartIdx = loopSeqStartRef.current;
+          if (countInOnRepeatRef.current && !pendingRestartRef.current) {
+            // Pause scheduling and queue a count-in before the loop repeats
+            pendingRestartRef.current = { seqIdx: restartIdx, resumeAt: nextTickTimeRef.current };
+            isPlayingRef.current = false;
+            return;
+          }
+          posRef.current = { seqIdx: restartIdx, tick: 0 };
           continue;
         }
       }
@@ -147,6 +158,11 @@ export default function Metronome() {
       // End of sequence
       if (seqIdx >= seq.length) {
         if (parsedRef.current.loopScore) {
+          if (countInOnRepeatRef.current && !pendingRestartRef.current) {
+            pendingRestartRef.current = { seqIdx: 0, resumeAt: nextTickTimeRef.current };
+            isPlayingRef.current = false;
+            return;
+          }
           posRef.current = { seqIdx: 0, tick: 0 };
           continue;
         }
@@ -288,6 +304,18 @@ export default function Metronome() {
     function rafLoop() {
       const ctx = audioCtxRef.current;
 
+      // Handle deferred loop restart with count-in
+      if (ctx && pendingRestartRef.current) {
+        const { seqIdx, resumeAt } = pendingRestartRef.current;
+        if (ctx.currentTime >= resumeAt - 0.05) {
+          pendingRestartRef.current = null;
+          posRef.current = { seqIdx, tick: 0 };
+          const ciResumeAt = scheduleCountIn(ctx, resumeAt, seqIdx);
+          nextTickTimeRef.current = ciResumeAt;
+          isPlayingRef.current = true;
+        }
+      }
+
       // Run the audio scheduler every frame — replaces setInterval.
       // rAF fires ~every 16ms which is well within the 150ms lookahead.
       if (isPlayingRef.current) scheduleNext();
@@ -327,6 +355,65 @@ export default function Metronome() {
     };
   }, []);
 
+  // ── Count-in scheduler ────────────────────────────────────────────────────
+  // Schedules count-in clicks starting at `startT` (audio time).
+  // Returns the audio time at which actual playback should begin.
+  const scheduleCountIn = useCallback((ctx, startT, resumeSeqIdx) => {
+    const { measures, seq } = parsedRef.current;
+    const resumeMn   = resumeSeqIdx !== null ? (seq[resumeSeqIdx] ?? 1) : null;
+    const mState     = (resumeMn ? measures[resumeMn] : null) || measures[1];
+    const scale      = tempoScaleRef.current;
+    const ciDenom    = countInDenomRef.current;
+    const ciBeats    = countInBeatsRef.current;
+    const { tempoBPM, tempoDenom } = mState;
+    const oneBeatSec = (tempoDenom / ciDenom) * (60 / (tempoBPM * scale));
+
+    setCountingIn(true);
+    setCountInRemaining(ciBeats);
+
+    for (let i = 0; i < ciBeats; i++) {
+      const t = startT + i * oneBeatSec;
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = i === 0 ? 1400 : 1000;
+      g.gain.setValueAtTime(i === 0 ? 0.7 : 0.5, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      osc.start(t); osc.stop(t + 0.06);
+      const capRemaining = ciBeats - i;
+      setTimeout(() => {
+        setCountingIn(true);
+        setCountInRemaining(capRemaining);
+        const capFlash = i === 0 ? 'measure' : 'primary';
+        flashRef.current = capFlash;
+        const isDark = themeRef.current === 'dark';
+        const flashColors = isDark
+          ? { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' }
+          : { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
+        const mobileNow = mobileRef.current;
+        for (const key of ['measure', 'primary', 'unit']) {
+          const el = flashDotsRef.current[key];
+          if (!el) continue;
+          const active = key === capFlash;
+          const col = flashColors[key];
+          const sz = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
+          el.style.width      = sz;
+          el.style.height     = sz;
+          el.style.background = active ? col : col + '28';
+          el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
+        }
+      }, Math.max(0, (t - ctx.currentTime) * 1000));
+    }
+
+    const resumeAt = startT + ciBeats * oneBeatSec;
+    setTimeout(() => {
+      setCountingIn(false);
+      setCountInRemaining(0);
+    }, Math.max(0, (resumeAt - ctx.currentTime) * 1000));
+
+    return resumeAt;
+  }, []);
+
   // ── Play / Stop ────────────────────────────────────────────────────────────
   function handlePlay() {
     if (playing) { setPlaying(false); return; }
@@ -340,61 +427,12 @@ export default function Metronome() {
     setPreviewMeasure(seq[startIdx] ?? realStart);
     currentBeatRef.current = 0;
     flashRef.current = null;
+    pendingRestartRef.current = null;
 
     if (countInEnabledRef.current) {
-      const { measures } = parsedRef.current;
-      const mState       = measures[realStart] || measures[1];
-      const scale        = tempoScaleRef.current;
-      const ciDenom      = countInDenomRef.current;
-      const ciBeats      = countInBeatsRef.current;
-      const { tempoBPM, tempoDenom } = mState;
-      const oneBeatSec   = (tempoDenom / ciDenom) * (60 / (tempoBPM * scale));
-      const startT       = ctx.currentTime + 0.05;
-
-      setCountingIn(true);
-      setCountInRemaining(ciBeats);
-
-      for (let i = 0; i < ciBeats; i++) {
-        const t = startT + i * oneBeatSec;
-        const osc = ctx.createOscillator();
-        const g   = ctx.createGain();
-        osc.connect(g); g.connect(ctx.destination);
-        osc.frequency.value = i === 0 ? 1400 : 1000;
-        g.gain.setValueAtTime(i === 0 ? 0.7 : 0.5, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-        osc.start(t); osc.stop(t + 0.06);
-        const capRemaining = ciBeats - i;
-        setTimeout(() => {
-          setCountingIn(true);
-          setCountInRemaining(capRemaining);
-          const capFlash = i === 0 ? 'measure' : 'primary';
-          flashRef.current = capFlash;
-          const isDark = themeRef.current === 'dark';
-          const flashColors = isDark
-            ? { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' }
-            : { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
-          const mobileNow = mobileRef.current;
-          for (const key of ['measure', 'primary', 'unit']) {
-            const el = flashDotsRef.current[key];
-            if (!el) continue;
-            const active = key === capFlash;
-            const col = flashColors[key];
-            const sz = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
-            el.style.width      = sz;
-            el.style.height     = sz;
-            el.style.background = active ? col : col + '28';
-            el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
-          }
-        }, Math.max(0, (t - ctx.currentTime) * 1000));
-      }
-
-      const scoreStartT = startT + ciBeats * oneBeatSec;
-      setTimeout(() => {
-        setCountingIn(false);
-        setCountInRemaining(0);
-      }, Math.max(0, (scoreStartT - ctx.currentTime) * 1000));
-
-      nextTickTimeRef.current   = scoreStartT;
+      const startT   = ctx.currentTime + 0.05;
+      const resumeAt = scheduleCountIn(ctx, startT, startIdx);
+      nextTickTimeRef.current   = resumeAt;
       isPlayingRef.current      = true;
       scheduleNext();
       skipPlayEffectRef.current = true;
@@ -803,46 +841,57 @@ export default function Metronome() {
 
             {/* Count-in */}
             <div style={{
-              display: 'flex', flexDirection: 'column', gap: 3,
+              display: 'flex', flexDirection: 'column', gap: 4,
               padding: '5px 8px',
               background: countInEnabled ? '#0a1a0a' : 'transparent',
               border: `1px solid ${countInEnabled ? '#336633' : C.border}`,
-              borderRadius: 4, flexShrink: 0,
+              borderRadius: 4, flexShrink: 0, overflow: 'visible',
             }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+              {/* Header row: checkbox + label + beat selects always in one line */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'nowrap' }}>
                 <input
                   type="checkbox" checked={countInEnabled}
                   onChange={e => setCountInEnabled(e.target.checked)}
-                  style={{ accentColor: C.green, cursor: 'pointer', width: mobile ? 16 : 13, height: mobile ? 16 : 13 }}
+                  style={{ accentColor: C.green, cursor: 'pointer', width: mobile ? 16 : 13, height: mobile ? 16 : 13, flexShrink: 0 }}
                 />
-                <span style={{ fontSize: mobile ? 10 : 9, color: countInEnabled ? C.green : C.textFaint, letterSpacing: 1 }}>
+                <span style={{ fontSize: mobile ? 10 : 9, color: countInEnabled ? C.green : C.textFaint, letterSpacing: 1, cursor: 'pointer', userSelect: 'none', flexShrink: 0 }}
+                  onClick={() => setCountInEnabled(v => !v)}>
                   COUNT IN
                 </span>
-              </label>
-              {countInEnabled && (
-                <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                {countInEnabled && <>
                   <select value={countInBeats} onChange={e => setCountInBeats(parseInt(e.target.value))}
-                    style={{ ...selectStyle, width: mobile ? 52 : 42 }}>
+                    style={{ ...selectStyle, width: mobile ? 48 : 52 }}>
                     <option value={2}>2</option>
                     <option value={3}>3</option>
                     <option value={4}>4</option>
                   </select>
                   <select value={countInDenom} onChange={e => setCountInDenom(parseInt(e.target.value))}
-                    style={{ ...selectStyle, width: mobile ? 64 : 54 }}>
+                    style={{ ...selectStyle, width: mobile ? 64 : 62 }}>
                     <option value={4}>4ths</option>
                     <option value={8}>8ths</option>
                   </select>
-                </div>
+                </>}
+              </div>
+              {/* On-repeat row */}
+              {countInEnabled && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox" checked={countInOnRepeat}
+                    onChange={e => setCountInOnRepeat(e.target.checked)}
+                    style={{ accentColor: C.green, cursor: 'pointer', width: mobile ? 14 : 11, height: mobile ? 14 : 11 }}
+                  />
+                  <span style={{ fontSize: mobile ? 9 : 8, color: countInOnRepeat ? C.green : C.textDim, letterSpacing: 1 }}>
+                    ON REPEAT
+                  </span>
+                </label>
               )}
             </div>
 
-            {/* Mobile measure readout */}
-            {mobile && (
-              <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{playing ? 'NOW' : 'M.'}</div>
-                {measureReadout(false)}
-              </div>
-            )}
+            {/* Measure readout — right side of row 1, both mobile and desktop */}
+            <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
+              {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{playing ? 'NOW' : 'M.'}</div>}
+              {measureReadout(!mobile)}
+            </div>
           </div>
 
           {/* Controls row 2: subdivide, tempo, BT, desktop measure readout */}
@@ -918,13 +967,6 @@ export default function Metronome() {
               );
             })()}
 
-            {/* Desktop measure readout */}
-            {!mobile && (
-              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2 }}>{playing ? 'PLAYING' : 'MEASURE'}</div>
-                {measureReadout(true)}
-              </div>
-            )}
           </div>
 
           {/* Pattern visualizer */}

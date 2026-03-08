@@ -67,6 +67,22 @@ export const RIT_EXAMPLE_SCORE = `1| 4/4 1/4=160
 11| 9/8
 15| 3/4 1/4=160`;
 
+export const TUPLET_EXAMPLE_SCORE = `1: 4/4 1/4=90
+3: (1+1+2[3:111])          # triplets of 1/4ths
+5: (1+1+[3:111]+[3:111])   # triplets of 1/8ths
+7: (1+1+2[5:11111])        # quintuplets
+9: ([3:21])                       # swing beat (tiled ×4)
+11: ([4:31])                         # dotted 1/8th + 16th (tiled ×4)
+13: ([8:71])                         # d-dotted 1/8th + 32nd (tiled ×4)
+# patterns with rests
+15: (1+1+[3:.11]+[3:.11])           # triplets with rest on first beat
+17: (1+1+[4:..11]+[4:..11])         # 1/8th rest + 2 1/16ths
+19: (1+1+[3:1.1]+[3:1.1])           # triplets with rest on middle beat
+21: ([3:.11]+[4:.111]+[5:.1111]+[6:.11111])
+# A particularly troublesome pattern
+23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
+25:`;
+
 export const DEFAULT_SCORE = `1|: 4/4, 1/4=90      # |: opens a repeat section
 8:| [A]              # :| closes it; rehearsal mark A
 9|: $ 7/8 (2+2+3)   # $ = segno; new repeat, odd meter

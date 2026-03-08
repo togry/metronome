@@ -1,6 +1,6 @@
 // ─── Help modal ───────────────────────────────────────────────────────────────
 
-import { RIT_EXAMPLE_SCORE } from '../constants.js';
+import { RIT_EXAMPLE_SCORE, TUPLET_EXAMPLE_SCORE } from '../constants.js';
 
 export default function HelpModal({ C, onClose, onRunExample, mobile }) {
   const sections = [
@@ -54,9 +54,30 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
       '  12| 1/4=60            arrival; rit spreads m.8-11',
       'Tempo is interpolated smoothly on every beat.',
     ], example: RIT_EXAMPLE_SCORE },
+    { h: 'Tuplets & Rhythmic Patterns', body: [
+      'A tuplet group fits N notes into a span of denom-units:',
+      '  N[div:slots]',
+      '  N = denom-units spanned (default 1 if omitted)',
+      '  div = number of equal parts to divide that span into',
+      '  slots = note durations in parts (digits, compact or + separated)',
+      '  .  in slots = rest (silent, no click)',
+      '',
+      'Examples:',
+      '  [3:21]        triplet: long + short (swing feel)',
+      '  [3:111]       three equal triplet notes',
+      '  2[3:111]      quarter-note triplet spanning 2 beats',
+      '  [3:.11]       triplet with silent first part',
+      '  [5:11111]     quintuplet',
+      '',
+      'Single-element shortcut: a grouping with just one element tiles',
+      'to fill the measure if it divides evenly.',
+      '  4/4 ([3:21])  → four swing beats  ([3:21]+[3:21]+[3:21]+[3:21])',
+      '  6/8 (3)       → two dotted-quarter beats  (same as default)',
+    ], example: TUPLET_EXAMPLE_SCORE },
     { h: 'Playback Controls', body: [
       '▶ / ◼  Play and stop.',
       'COUNT IN  Adds a count-in before playback; choose beats and note value.',
+      '  ON REPEAT: also insert a count-in each time a loop or score repeats.',
       'SUBDIVIDE  Primary beats only, or subdivided to 4ths / 8ths / 16ths / 32nds.',
       '  Sub-clicks are added only where a beat divides evenly.',
       'TEMPO slider  10–150% of written tempo.',

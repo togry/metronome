@@ -105,6 +105,62 @@ Groupings are remembered per time signature. If you write `7/8 (2+2+3)` at
 measure 4 and bare `7/8` at measure 19, measure 19 automatically inherits
 `(2+2+3)`.
 
+### Tuplets & rhythmic patterns
+
+A tuplet group fits a set of notes into a given number of denom-units:
+
+```
+N[div:slots]
+```
+
+- `N` — denom-units spanned (omit for 1)
+- `div` — number of equal parts to divide that span into
+- `slots` — note durations in parts; digits run together (compact) or separated by `+`; `.` is a rest
+
+```
+[3:21]       triplet: 2 parts long + 1 part short  (swing)
+[3:111]      three equal triplet notes
+2[3:111]     quarter-note triplet spanning 2 beats
+[3:.11]      triplet with silent first part
+[5:11111]    quintuplet
+[8:71]       double-dotted 8th + 32nd
+```
+
+**Single-element tiling shortcut** — a grouping containing only one element
+is automatically tiled to fill the measure (error if it doesn't divide evenly):
+
+```
+4/4 ([3:21])       → [3:21]+[3:21]+[3:21]+[3:21]  (four swing beats)
+4/4 ([3:111])      → twelve equal triplet 8ths
+6/8 (3)            → 3+3  (same as the compound-meter default)
+```
+
+Rest slots (`.`) produce a silent tick — the dot is shown hollow in the
+pattern visualiser and the header flash dims, but no audio click fires.
+Tuplets always play as written regardless of the SUBDIVIDE setting.
+
+**Pasteable example** covering common tuplet patterns:
+
+```
+1: 4/4 1/4=90
+3: (1+1+2[3:111])          # triplets of 1/4ths
+5: (1+1+[3:111]+[3:111])   # triplets of 1/8ths
+7: (1+1+2[5:11111])        # quintuplets
+9: ([3:21])                # swing beat (tiled ×4)
+11: ([4:31])               # dotted 1/8th + 16th (tiled ×4)
+13: ([8:71])               # d-dotted 1/8th + 32nd (tiled ×4)
+# patterns with rests
+15: (1+1+[3:.11]+[3:.11])           # triplets with rest on first beat
+17: (1+1+[4:..11]+[4:..11])         # 1/8th rest + 2 1/16ths
+19: (1+1+[3:1.1]+[3:1.1])           # triplets with rest on middle beat
+21: ([3:.11]+[4:.111]+[5:.1111]+[6:.11111])
+# A particularly troublesome pattern
+23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
+25:
+```
+
+
+
 ### Tempo
 
 Written as `1/note=BPM`, e.g. `1/4=120` means quarter note = 120 bpm.
@@ -172,8 +228,9 @@ are ignored.
 ### Playback
 
 - **▶ / ◼** — play and stop
-- **COUNT IN** — checkbox to enable a count-in; choose 2, 3, or 4 beats of
-  quarters or eighths
+- **COUNT IN** — checkbox to enable a count-in before playback; choose 2, 3,
+  or 4 beats of quarters or eighths. Tick **ON REPEAT** to also insert a
+  count-in each time a loop region or looping score wraps around.
 - **SUBDIVIDE** — primary beats only, or subdivided to 4ths / 8ths / 16ths /
   32nds (sub-clicks added only where the beat divides evenly)
 - **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider
