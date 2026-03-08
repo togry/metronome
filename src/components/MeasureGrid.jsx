@@ -1,5 +1,7 @@
 // ─── Measure grid ─────────────────────────────────────────────────────────────
 
+import { getPrimaryGroups, groupingShortLabel } from '../beatModel.js';
+
 export default function MeasureGrid({
   C, mobile, portrait,
   measures, playing, currentMeasure, previewMeasure,
@@ -36,9 +38,10 @@ export default function MeasureGrid({
               key={ms.measureNumber}
               onClick={() => onMeasureClick(ms.measureNumber)}
               style={{
-                padding: mobile ? '4px' : '3px 5px',
+                padding: mobile ? '3px 4px' : '3px 5px',
                 borderRadius: 3, cursor: 'pointer',
                 minHeight: mobile ? 38 : 44,
+                display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                 background:
                   isActive ? `${C.gold}18` :
                   isPrev   ? `${C.unit}12` :
@@ -69,9 +72,9 @@ export default function MeasureGrid({
                 {ms.numerator}/{ms.denominator}
               </div>
 
-              {/* Grouping */}
-              <div style={{ fontSize: 7, color: C.textFaint }}>
-                {ms.grouping ? ms.grouping.join('+') : ''}
+              {/* Grouping — fixed height whether present or not, so bottom row aligns */}
+              <div style={{ fontSize: 7, color: C.textFaint, minHeight: '1em', lineHeight: 1 }}>
+                {ms.grouping ? groupingShortLabel(ms.grouping) : ''}
               </div>
 
               {/* Bottom row: open/close repeat, end barline, directives */}

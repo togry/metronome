@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 import { parseScore }                   from './parser.js';
-import { getBeatPattern, getPrimaryGroups, oneDenomUnitSec, tickDurationSec } from './beatModel.js';
+import { getBeatPattern, getPrimaryGroups, groupingShortLabel, groupingFullLabel, oneDenomUnitSec, tickDurationSec } from './beatModel.js';
 import { getTimelineEvents, computeLoopSeqBounds } from './timeline.js';
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
 
@@ -165,20 +165,22 @@ export default function Metronome() {
       const tickData    = pattern[tickIdx];
       const t           = nextTickTimeRef.current;
 
-      // Audio
-      const osc = ctx.createOscillator();
-      const g   = ctx.createGain();
-      osc.connect(g); g.connect(ctx.destination);
-      const [freq, vol] =
-        tickData.weight === 3 ? [1400, 0.80] :
-        tickData.weight === 2 ? [950,  0.60] :
-        tickData.weight === 1 ? [700,  0.40] :
-                                [460,  0.15];
-      osc.frequency.value = freq;
-      const tAudio = Math.max(ctx.currentTime, t - btLatencyRef.current);
-      g.gain.setValueAtTime(vol, tAudio);
-      g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
-      osc.start(tAudio); osc.stop(tAudio + 0.07);
+      // Audio — skipped for rest ticks
+      if (tickData.weight > 0) {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        const [freq, vol] =
+          tickData.weight === 3 ? [1400, 0.80] :
+          tickData.weight === 2 ? [950,  0.60] :
+          tickData.weight === 1 ? [700,  0.40] :
+                                  [460,  0.15];
+        osc.frequency.value = freq;
+        const tAudio = Math.max(ctx.currentTime, t - btLatencyRef.current);
+        g.gain.setValueAtTime(vol, tAudio);
+        g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
+        osc.start(tAudio); osc.stop(tAudio + 0.07);
+      }
 
       // Queue visual update — consumed by the rAF loop.
       // Storing fireAt (audio clock value) lets the rAF loop fire with
@@ -229,7 +231,8 @@ export default function Metronome() {
       const dark = themeRef.current === 'dark';
       for (const dot of patternDotsRef.current) {
         if (!dot) continue;
-        dot._active          = false;
+        dot._active = false;
+        if (dot._rest) continue; // rest dots have static appearance — leave them alone
         const col            = dot._col;
         dot.style.background = col + (dark ? '33' : '55');
         dot.style.boxShadow  = 'none';
@@ -238,6 +241,7 @@ export default function Metronome() {
     }
 
     function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
+      const isRest      = weight === 0;
       const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
       const isDark      = themeRef.current === 'dark';
       const mobileNow   = mobileRef.current;
@@ -250,13 +254,13 @@ export default function Metronome() {
       }
 
       currentBeatRef.current = capT;
-      flashRef.current       = capFlash;
+      if (!isRest) flashRef.current = capFlash;
 
-      // Header flash dots — always update all three so inactive ones dim
+      // Header flash dots — on a rest, dim all (no flash)
       for (const key of ['measure', 'primary', 'unit']) {
         const el = flashDotsRef.current[key];
         if (!el) continue;
-        const active = lightDot && key === capFlash;
+        const active = !isRest && lightDot && key === capFlash;
         const col    = flashColors[key];
         const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
         el.style.width      = sz;
@@ -267,11 +271,11 @@ export default function Metronome() {
         if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
       }
 
-      // Pattern dots — always dim everything first, then optionally light capT
+      // Pattern dots — dim everything, then light capT unless it's a rest
       dimAllDots();
-      if (lightDot) {
+      if (lightDot && !isRest) {
         const activeDot = patternDotsRef.current[capT];
-        if (activeDot) {
+        if (activeDot && !activeDot._rest) {
           activeDot._active          = true;
           const col                  = activeDot._col;
           activeDot.style.background = col;
@@ -634,13 +638,15 @@ export default function Metronome() {
   const measureReadout = (large) => {
     const mn  = playing ? currentMeasure : previewMeasure;
     const ms  = measures[mn];
-    const sig = ms ? `[${ms.numerator}/${ms.denominator}${ms.grouping ? ' ' + ms.grouping.join('+') : ''}]` : '';
+    const hasTuplet = ms?.grouping?.some(g => typeof g === 'object');
+    const sig = ms ? `${ms.numerator}/${ms.denominator}${hasTuplet ? '*' : ''}` : '';
     const sz  = large ? 38 : 32;
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: large ? 8 : 6, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: large ? 6 : 4, justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: mobile ? 11 : 13, color: C.textFaint, letterSpacing: 1 }}>m.</span>
           <span style={{ fontSize: sz, color: C.gold, fontWeight: 'bold', lineHeight: 1 }}>{mn}</span>
-          <span style={{ fontSize: sz, color: C.gold, fontWeight: 'bold', lineHeight: 1 }}>{sig}</span>
+          <span style={{ fontSize: mobile ? 13 : 16, color: C.gold, lineHeight: 1 }}>[{sig}]</span>
         </div>
         <div style={{ fontSize: large ? 13 : 11, letterSpacing: 2, minHeight: '1.4em',
           color: lastRM ? (lastRM.atCurrent ? C.gold : C.reh) : 'transparent' }}>
@@ -938,10 +944,15 @@ export default function Metronome() {
               </span>
               {previewMs && (() => {
                 const groups = getPrimaryGroups(previewMs);
+                const hasTuplet = groups.some(g => typeof g === 'object');
+                const groupLabel = hasTuplet
+                  ? groupingFullLabel(groups)
+                  : groups.join('+');
+                const clicks = previewPattern.filter(t => t.weight > 0).length;
                 return (
                   <span style={{ color: C.textDim }}>
-                    {groups.join('+')} × {previewMs.denominator === 2 ? '½' : previewMs.denominator === 4 ? '¼' : `1/${previewMs.denominator}`}
-                    {' → '}{previewPattern.length} click{previewPattern.length !== 1 ? 's' : ''}
+                    {groupLabel} × {previewMs.denominator === 2 ? '½' : previewMs.denominator === 4 ? '¼' : `1/${previewMs.denominator}`}
+                    {' → '}{clicks} click{clicks !== 1 ? 's' : ''}
                   </span>
                 );
               })()}
@@ -951,8 +962,11 @@ export default function Metronome() {
               ref={() => { patternDotsRef.current.length = previewPattern.length; }}
             >
               {previewPattern.map((tick, i) => {
-                const col = tick.weight === 3 ? C.measure : tick.weight === 2 ? C.primary : tick.weight === 1 ? C.unit : C.sub;
-                const sz  = mobile
+                const isRest = tick.weight === 0;
+                const col = isRest ? C.textFaint
+                  : tick.weight === 3 ? C.measure : tick.weight === 2 ? C.primary : tick.weight === 1 ? C.unit : C.sub;
+                const sz  = isRest ? (mobile ? 8 : 6)
+                  : mobile
                   ? (tick.weight === 3 ? 34 : tick.weight === 2 ? 26 : tick.weight === 1 ? 18 : 11)
                   : (tick.weight === 3 ? 30 : tick.weight === 2 ? 22 : tick.weight === 1 ? 15 : 9);
                 return (
@@ -963,15 +977,17 @@ export default function Metronome() {
                         patternDotsRef.current[i] = el;
                         el._col    = col;
                         el._active = false;
+                        el._rest   = isRest;
                       }
                     }}
                     style={{
                       width: sz, height: sz,
-                      borderRadius: tick.weight >= 2 ? 4 : '50%',
-                      background: col + (theme === 'light' ? '55' : '33'),
-                      border: `1.5px solid ${col}${theme === 'light' ? '99' : '77'}`,
+                      borderRadius: '50%',
+                      background: isRest ? 'transparent' : col + (theme === 'light' ? '55' : '33'),
+                      border: isRest ? `1px solid ${col}` : `1.5px solid ${col}${theme === 'light' ? '99' : '77'}`,
                       boxShadow: 'none',
                       flexShrink: 0,
+                      opacity: isRest ? 0.4 : 1,
                     }}
                   />
                 );

@@ -7,6 +7,17 @@
 //   2/4, 3/4, 4/4 → [1, 1, ...]
 //   6/8, 9/8, 12/8 → groups of 3 (dotted quarter)
 //   odd meters    → explicit grouping array
+//
+// Grouping elements may be:
+//   number                   — plain beat group (integer denom-units)
+//   { units, div, slots }    — tuplet: fills `units` denom-units, divided into
+//                              `div` equal parts; slots = array of numbers (click
+//                              durations in parts) or 'rest' (silent part)
+
+// Return the denom-unit size of a grouping element (plain or tuplet)
+export function groupUnits(g) {
+  return typeof g === 'object' ? g.units : g;
+}
 
 export function getPrimaryGroups(mState) {
   const { numerator, denominator, grouping } = mState;
@@ -22,36 +33,70 @@ export function getBeatPattern(mState, subdivTargetDenom) {
 
   const primaryStarts = new Set();
   let cur = 0;
-  for (const g of groups) { primaryStarts.add(cur); cur += g; }
-
-  if (subdivTargetDenom === 0) {
-    return groups.map((g, i) => ({ weight: i === 0 ? 3 : 2, durationUnits: g }));
-  }
+  for (const g of groups) { primaryStarts.add(cur); cur += groupUnits(g); }
 
   const pattern = [];
   let unitPos   = 0;
 
   groups.forEach((g, gi) => {
-    const rawSubs  = g * subdivTargetDenom / denominator;
-    const numSubs  = Number.isInteger(rawSubs) && rawSubs >= 1 ? rawSubs : 1;
-    const subDur   = g / numSubs;
+    const isMeasureDownbeat = gi === 0;
 
-    for (let s = 0; s < numSubs; s++) {
-      const globalUnit = unitPos + s * subDur;
-      let weight;
-      if (gi === 0 && s === 0)                                                    weight = 3;
-      else if (s === 0)                                                            weight = 2;
-      else if (Number.isInteger(globalUnit) && primaryStarts.has(Math.round(globalUnit))) weight = 2;
-      else                                                                         weight = 1;
-      pattern.push({ weight, durationUnits: subDur });
+    if (typeof g === 'object') {
+      // ── Tuplet group ──────────────────────────────────────────────────────
+      // Always plays as written regardless of subdivide setting.
+      // durationUnits is fractional: each part = g.units / g.div denom-units.
+      const partDur = g.units / g.div;
+      g.slots.forEach((slot, si) => {
+        const isRest = slot === 'rest';
+        const parts  = isRest ? 1 : slot;
+        const dur    = parts * partDur;
+        const weight = isRest ? 0
+          : (isMeasureDownbeat && si === 0) ? 3
+          : si === 0 ? 2
+          : 1;
+        pattern.push({ weight, durationUnits: dur, rest: isRest });
+      });
+    } else {
+      // ── Plain group ───────────────────────────────────────────────────────
+      if (subdivTargetDenom === 0) {
+        pattern.push({ weight: isMeasureDownbeat ? 3 : 2, durationUnits: g });
+      } else {
+        const rawSubs = g * subdivTargetDenom / denominator;
+        const numSubs = Number.isInteger(rawSubs) && rawSubs >= 1 ? rawSubs : 1;
+        const subDur  = g / numSubs;
+        for (let s = 0; s < numSubs; s++) {
+          const globalUnit = unitPos + s * subDur;
+          let weight;
+          if (isMeasureDownbeat && s === 0)                                                    weight = 3;
+          else if (s === 0)                                                                     weight = 2;
+          else if (Number.isInteger(globalUnit) && primaryStarts.has(Math.round(globalUnit))) weight = 2;
+          else                                                                                  weight = 1;
+          pattern.push({ weight, durationUnits: subDur });
+        }
+      }
     }
-    unitPos += g;
+    unitPos += groupUnits(g);
   });
 
   return pattern;
 }
 
-// Seconds per one denominator unit at the current tempo and rehearsal scale
+// Short label for a grouping: plain numbers joined by '+', tuplet groups shown as N*
+// e.g. [2, {units:1,div:3,...}, 1] → "2+1*+1"
+export function groupingShortLabel(groups) {
+  return groups.map(g =>
+    typeof g === 'object' ? `${g.units > 1 ? g.units : ''}*` : String(g)
+  ).join('+');
+}
+
+// Full label for display above the flash dots, e.g. "2+[3:21]+1"
+export function groupingFullLabel(groups) {
+  return groups.map(g => {
+    if (typeof g !== 'object') return String(g);
+    const slotsStr = g.slots.map(s => s === 'rest' ? '.' : String(s)).join('');
+    return `${g.units > 1 ? g.units : ''}[${g.div}:${slotsStr}]`;
+  }).join('+');
+}
 export function oneDenomUnitSec(mState, tempoScale) {
   const { tempoBPM, tempoDenom, tempoDotted, denominator } = mState;
   const dotFactor = tempoDotted ? 1.5 : 1;

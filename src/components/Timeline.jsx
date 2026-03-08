@@ -8,11 +8,17 @@ export default function Timeline({
   timelineRef, timelineScrollRef,
   onMouseDown, onTouchStart, onTouchMove, onTouchEnd,
 }) {
+  // Fixed row tops (px from top of track) — same for every event label
+  const R1 = 2;   // rehearsal mark
+  const R2 = 13;  // time signature
+  const R3 = 24;  // repeat / coda / segno / directive
+  const TRACK_H = mobile ? 38 : 42;
+
   return (
-    <div style={{ padding: mobile ? '8px 12px 4px' : '12px 20px 4px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-      <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>
+    <div style={{ padding: mobile ? '6px 12px 2px' : '8px 20px 2px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+      <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 4, letterSpacing: 1 }}>
         {mobile
-          ? 'TIMELINE · tap = start · double-tap & drag = loop · 2-finger drag = scroll'
+          ? 'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll'
           : 'TIMELINE · click = set start · drag = loop · shift-click = set loop end'}
       </div>
 
@@ -28,7 +34,7 @@ export default function Timeline({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {/* Inner track */}
+        {/* Inner track — extra bottom margin makes room for measure number labels */}
         <div
           ref={timelineRef}
           onMouseDown={onMouseDown}
@@ -38,11 +44,12 @@ export default function Timeline({
           style={{
             position: 'relative',
             width: timelineContentWidth,
-            height: mobile ? 52 : 60,
+            height: TRACK_H,
             background: C.bgDark,
             border: `1px solid ${C.border}`,
             borderRadius: 4,
             cursor: 'crosshair',
+            marginBottom: 14,
           }}
         >
           {/* Loop region */}
@@ -59,20 +66,20 @@ export default function Timeline({
             }} />
           )}
 
-          {/* Measure ticks */}
+          {/* Measure ticks + number labels below track */}
           {Array.from({ length: totalMeasures }, (_, i) => i + 1).map(mn => {
             const labelStep = pxPerSlot < 30 ? Math.ceil(30 / pxPerSlot) : 1;
             const showLabel = mn === 1 || mn % labelStep === 0;
             return (
               <div key={mn} style={{
                 position: 'absolute', left: measPx(mn),
-                bottom: 0, height: showLabel ? 8 : 4, width: 1,
+                bottom: 0, height: showLabel ? 6 : 3, width: 1,
                 background: showLabel ? C.textDim : C.textFaint,
                 pointerEvents: 'none',
               }}>
                 {showLabel && (
                   <div style={{
-                    position: 'absolute', bottom: -14, left: '50%',
+                    position: 'absolute', top: '100%', marginTop: 2, left: '50%',
                     transform: 'translateX(-50%)',
                     fontSize: 8, color: C.textFaint, whiteSpace: 'nowrap',
                   }}>{mn}</div>
@@ -81,59 +88,70 @@ export default function Timeline({
             );
           })}
 
-          {/* Timeline events */}
+          {/* Timeline events — fixed 3-row layout */}
           {timelineEvents.map((ev, idx) => {
-            const px        = ev.rightEdge ? measPx(ev.measure + 1) : measPx(ev.measure);
-            const isReh     = !!ev.rehearsal;
-            const lineColor = ev.isFine    ? C.text
-              : isReh                      ? C.reh
+            const px    = ev.rightEdge ? measPx(ev.measure + 1) : measPx(ev.measure);
+            const isReh = !!ev.rehearsal;
+
+            const lineColor =
+              ev.isFine        ? C.text
+              : isReh          ? C.reh
               : (ev.barline === '||' || ev.barline === ':||' || ev.barline === '||:') ? C.textDim
-              : ev.closeRepeat             ? C.primary
+              : ev.closeRepeat ? C.primary
               : C.borderHi;
             const lineWidth = ev.isFine ? 3 : isReh ? 2 : ev.closeRepeat ? 2 : 1;
-            const label =
-              ev.isFine      ? '‖'
-              : isReh        ? `[${ev.rehearsal}]`
-              : ev.directive ? ev.directive
-                  .replace('DC_FINE', 'D.C. al Fine')
-                  .replace('DC_CODA', 'D.C. al Coda')
-                  .replace('DS_FINE', 'D.S. al Fine')
-                  .replace('DS_CODA', 'D.S. al Coda')
-                  .replace('FINE',    'Fine')
-                  .replace('CODA',    'Coda')
+
+            // Row 1 — rehearsal mark (left-edge only)
+            const rehLabel = !ev.rightEdge && isReh ? `[${ev.rehearsal}]` : null;
+
+            // Row 2 — time signature (left-edge only)
+            const hasTuplet = ev.grouping?.some(g => typeof g === 'object');
+            const sigLabel  = !ev.rightEdge
+              ? `${ev.numerator}/${ev.denominator}${hasTuplet ? '*' : ''}`
+              : null;
+
+            // Row 3 — repeat / directive / segno / coda / fine
+            const row3Label =
+              ev.isFine        ? '‖'
+              : ev.directive   ? ev.directive
+                  .replace('DC_FINE','D.C.aF').replace('DC_CODA','D.C.aC')
+                  .replace('DS_FINE','D.S.aF').replace('DS_CODA','D.S.aC')
+                  .replace('FINE','Fine').replace('CODA','Coda')
               : ev.segno       ? '$'
               : ev.codaJump    ? '@'
               : ev.closeRepeat ? ':]'
               : ev.openRepeat  ? '[:'
-              : ' ';
-            const labelColor =
-              ev.isFine      ? C.measure
-              : isReh        ? C.reh
-              : ev.directive ? C.primary
+              : null;
+
+            const row3Color =
+              ev.isFine        ? C.measure
+              : ev.directive   ? C.primary
               : (ev.segno || ev.codaJump) ? C.unit
               : (ev.openRepeat || ev.closeRepeat) ? C.primary
-              : 'transparent';
+              : C.textFaint;
+
+            const anchor = ev.rightEdge
+              ? { right: lineWidth + 2, textAlign: 'right' }
+              : { left:  lineWidth + 2 };
 
             return (
               <div key={idx} style={{ position: 'absolute', left: px, top: 0, bottom: 0, pointerEvents: 'none' }}>
                 <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: lineWidth, background: lineColor }} />
-                <div style={{
-                  position: 'absolute', top: 3,
-                  ...(ev.rightEdge
-                    ? { right: lineWidth + 2, textAlign: 'right' }
-                    : { left: lineWidth + 2 }),
-                  fontSize: mobile ? 8 : 9, lineHeight: 1.4, whiteSpace: 'nowrap',
-                }}>
-                  <div style={{ fontWeight: 'bold', fontSize: mobile ? 9 : 10, color: labelColor, height: mobile ? 12 : 14, overflow: 'hidden' }}>
-                    {label}
+                {rehLabel && (
+                  <div style={{ position: 'absolute', top: R1, ...anchor, fontSize: mobile ? 8 : 9, fontWeight: 'bold', color: C.reh, whiteSpace: 'nowrap' }}>
+                    {rehLabel}
                   </div>
-                  {!ev.rightEdge && (
-                    <>
-                      <div style={{ color: C.textDim }}>{ev.numerator}/{ev.denominator}</div>
-                      <div style={{ color: C.textFaint }}>{ev.grouping ? `(${ev.grouping.join('+')})` : ''}</div>
-                    </>
-                  )}
-                </div>
+                )}
+                {sigLabel && (
+                  <div style={{ position: 'absolute', top: R2, ...anchor, fontSize: mobile ? 7 : 8, color: C.textDim, whiteSpace: 'nowrap' }}>
+                    {sigLabel}
+                  </div>
+                )}
+                {row3Label && (
+                  <div style={{ position: 'absolute', top: R3, ...anchor, fontSize: mobile ? 7 : 8, color: row3Color, whiteSpace: 'nowrap' }}>
+                    {row3Label}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -146,13 +164,9 @@ export default function Timeline({
               background: C.measure, boxShadow: `0 0 8px ${C.measure}`,
               pointerEvents: 'none',
             }}>
-              <div style={{
-                position: 'absolute', top: 0, left: -4,
-                width: 0, height: 0,
-                borderLeft: '5px solid transparent',
-                borderRight: '5px solid transparent',
-                borderTop: `8px solid ${C.measure}`,
-              }} />
+              <div style={{ position: 'absolute', top: 0, left: -4, width: 0, height: 0,
+                borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+                borderTop: `8px solid ${C.measure}` }} />
             </div>
           )}
 
@@ -163,21 +177,11 @@ export default function Timeline({
             background: loopEnd !== null ? C.orange : C.green,
             pointerEvents: 'none',
           }}>
-            <div style={{
-              position: 'absolute', top: 0, left: -4,
-              width: 0, height: 0,
-              borderLeft: '5px solid transparent',
-              borderRight: '5px solid transparent',
-              borderTop: `8px solid ${loopEnd !== null ? C.orange : C.green}`,
-            }} />
+            <div style={{ position: 'absolute', top: 0, left: -4, width: 0, height: 0,
+              borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+              borderTop: `8px solid ${loopEnd !== null ? C.orange : C.green}` }} />
           </div>
         </div>
-      </div>
-
-      {/* Ruler end labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, padding: '0 2px' }}>
-        <span style={{ fontSize: 9, color: C.textFaint }}>m.1</span>
-        <span style={{ fontSize: 9, color: C.textFaint }}>m.{totalMeasures}</span>
       </div>
     </div>
   );

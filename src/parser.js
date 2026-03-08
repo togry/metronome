@@ -9,6 +9,85 @@
 //   :||          close repeat + double barline
 //   |:|          single-measure repeat
 
+// ── Tuplet slot parser ─────────────────────────────────────────────────────────
+// Parses the inner content of [N:...] — either compact (no +) or explicit (has +).
+// Returns array of numbers (click durations in parts) or 'rest' strings.
+// Returns null on parse error.
+function parseTupletSlots(inner, div) {
+  let slots;
+  if (inner.includes('+')) {
+    // Explicit form: split on +, each token is integer or run of dots
+    const tokens = inner.split('+');
+    // Mixed check: compact digits-only tokens alongside explicit are invalid
+    slots = tokens.map(tok => {
+      if (/^\d+$/.test(tok)) return parseInt(tok);
+      if (/^\.+$/.test(tok)) return tok.length; // convert dots to rest count... wait
+      return null;
+    });
+    // Actually dots in explicit form = rests: each dot = 1-part rest
+    slots = tokens.flatMap(tok => {
+      if (/^\d+$/.test(tok)) return [parseInt(tok)];
+      if (/^\.+$/.test(tok)) return Array(tok.length).fill('rest');
+      return [null];
+    });
+  } else {
+    // Compact form: each character is one token
+    slots = [];
+    for (const ch of inner) {
+      if (ch >= '1' && ch <= '9') slots.push(parseInt(ch));
+      else if (ch === '.') slots.push('rest');
+      else return null; // unexpected char
+    }
+  }
+  if (slots.includes(null)) return null;
+  // Validate: numeric slots sum to div; rests each count as 1 part
+  const total = slots.reduce((s, v) => s + (v === 'rest' ? 1 : v), 0);
+  if (total !== div) return null;
+  return slots;
+}
+
+// Parses a grouping string like "2+2+3" or "[3:21]+1+1+1" or "2+[5:1..11]".
+// Returns an array where each element is either:
+//   number              — plain beat group (integer denom-units)
+//   { units, div, slots } — tuplet beat group
+function parseGrouping(str) {
+  // Tokenise: split on '+' but respect [...] brackets (including leading digits like 2[3:21])
+  const tokens = [];
+  let i = 0;
+  while (i < str.length) {
+    // Find next '[', accounting for optional leading integer
+    const brack = str.indexOf('[', i);
+    const plus  = str.indexOf('+', i);
+    if (brack !== -1 && (plus === -1 || brack <= plus)) {
+      // Everything from i to ']' is one tuplet token (may have leading digit)
+      const close = str.indexOf(']', brack);
+      if (close === -1) return str.split('+').map(Number); // malformed, fall back
+      tokens.push(str.slice(i, close + 1));
+      i = close + 1;
+      if (str[i] === '+') i++;
+    } else if (plus !== -1) {
+      tokens.push(str.slice(i, plus));
+      i = plus + 1;
+    } else {
+      tokens.push(str.slice(i));
+      break;
+    }
+  }
+
+  return tokens.map(tok => {
+    // Tuplet: optional N then [div:content], e.g. "2[3:21]" or "[3:21]"
+    const m = tok.match(/^(\d*)\[(\d+):([0-9+.\[\]:]+)\]$/);
+    if (m) {
+      const units = m[1] ? parseInt(m[1]) : 1;
+      const div   = parseInt(m[2]);
+      const slots = parseTupletSlots(m[3], div);
+      if (!slots) return NaN;
+      return { units, div, slots };
+    }
+    return parseInt(tok);
+  });
+}
+
 // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
 const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
 
@@ -54,9 +133,9 @@ export function parseScore(text) {
       remaining = remaining.slice(remaining.indexOf(tsM[0]) + tsM[0].length).trim();
     }
 
-    const grpM = remaining.match(/\(([0-9+]+)\)/);
+    const grpM = remaining.match(/\(([0-9+.\[\]:]+)\)/);
     if (grpM) {
-      ev.grouping = grpM[1].split('+').map(Number);
+      ev.grouping = parseGrouping(grpM[1]);
       remaining = remaining.slice(remaining.indexOf(grpM[0]) + grpM[0].length).trim();
     }
 
@@ -131,6 +210,8 @@ export function parseScore(text) {
   const noExplicitEnd      = lastDoublebar === null;
   const endAt              = noExplicitEnd ? lastDefinedMeasure : lastDoublebar;
 
+  const warnings = [];
+
   // ── Forward pass: build measures[] ──────────────────────────────────────────
   let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
   const measures       = [];
@@ -143,8 +224,20 @@ export function parseScore(text) {
       const newDen = c.denominator ?? state.denominator;
       let resolvedGrouping;
       if (c.grouping) {
-        resolvedGrouping = c.grouping;
-        knownGroupings[`${newNum}/${newDen}`] = c.grouping;
+        // Single-element shortcut: tile to fill the measure if it divides evenly
+        let g = c.grouping;
+        if (g.length === 1) {
+          const elemUnits = typeof g[0] === 'object' ? g[0].units : g[0];
+          if (newNum % elemUnits === 0) {
+            const reps = newNum / elemUnits;
+            g = Array.from({ length: reps }, () => g[0]);
+          } else {
+            warnings.push(`m.${mn}: grouping element (${elemUnits} unit${elemUnits !== 1 ? 's' : ''}) does not divide ${newNum}/${newDen} evenly — grouping ignored`);
+            g = null;
+          }
+        }
+        resolvedGrouping = g;
+        if (g) knownGroupings[`${newNum}/${newDen}`] = g;
       } else {
         resolvedGrouping =
           knownGroupings[`${newNum}/${newDen}`]
@@ -174,7 +267,6 @@ export function parseScore(text) {
   }
 
   // ── Rit/accel span pass ──────────────────────────────────────────────────────
-  const warnings = [];
   {
     const tempoMeasures = Object.keys(changes).map(Number).sort((a, b) => a - b);
 
