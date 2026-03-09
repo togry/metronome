@@ -35,6 +35,9 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
       '  ||          Double barline; last one ends the score',
       '  ||:         Double barline + open repeat',
       '  :||         Close repeat + double barline',
+      'To start a new repeat immediately after closing one, use',
+      '  :| on the last bar of the first repeat, then',
+      '  |: on the first bar of the next repeat.',
       'If no || is present the score loops back to m.1 (practice loop).',
     ]},
     { h: 'DC / DS al Fine / al Coda', body: [

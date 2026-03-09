@@ -64,6 +64,11 @@ All fields except the measure number and separator are optional.
 | `\|\|:` | Double barline + open repeat |
 | `:\|\|` | Close repeat + double barline |
 
+To start a new repeat immediately after closing one, use `:\|` on the last
+bar of the first repeat and `\|:` on the first bar of the next — two
+separate lines rather than a combined `:\|:` glyph, which is ambiguous
+(is that bar part of the first repeat, the second, or both?).
+
 ### Example score
 
 ```
