@@ -710,7 +710,7 @@ export default function Metronome() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div ref={rootRef} style={{
-      height: '100vh', background: C.bg, color: C.text,
+      height: '100vh', minHeight: '-webkit-fill-available', background: C.bg, color: C.text,
       fontFamily: "'Courier New', monospace",
       display: 'flex', flexDirection: 'column', userSelect: 'none',
       overflow: 'hidden',
@@ -902,7 +902,7 @@ export default function Metronome() {
             alignItems: 'flex-end', flexWrap: 'wrap',
             background: C.bgMid, flexShrink: 0,
             ...(mobile ? {} : { paddingTop: 8 }),
-            ...(portrait ? { overflowY: 'auto', maxHeight: '38vh', WebkitOverflowScrolling: 'touch' } : {}),
+            ...(portrait ? { overflowY: 'auto', maxHeight: '38dvh', WebkitOverflowScrolling: 'touch' } : {}),
             ...(mobile && !portrait ? { flexShrink: 0 } : {}),
           }}>
             {/* Subdivide */}

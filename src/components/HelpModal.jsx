@@ -129,7 +129,7 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
         style={{
           background: C.bgMid, border: `1px solid ${C.borderHi}`,
           borderRadius: 8, maxWidth: 560, width: '100%',
-          maxHeight: '85vh', overflowY: 'auto',
+          maxHeight: '85dvh', overflowY: 'auto',
           padding: 24,
           fontFamily: "'Courier New', monospace",
           color: C.text,
