@@ -193,6 +193,10 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
         <div style={{ fontSize: 10, color: C.textFaint, marginTop: 8, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
           Click outside this panel or press ✕ to close.
         </div>
+        <div style={{ fontSize: 10, color: C.textFaint, marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 8, lineHeight: 1.7 }}>
+          Concept and design: Tom Grydeland &lt;tom.grydeland@gmail.com&gt;<br/>
+          Implementation: Claude Sonnet 4.5 &amp; 4.6 (Anthropic), directed by the above
+        </div>
       </div>
     </div>
   );
