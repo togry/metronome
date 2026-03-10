@@ -52,6 +52,12 @@ function parseTupletSlots(inner, div) {
 //   { units, div, slots } — tuplet beat group
 function parseGrouping(str) {
   // Tokenise: split on '+' but respect [...] brackets (including leading digits like 2[3:21])
+  // Compact form: no '+' and no '[' — treat each character as a digit token
+  // e.g. "223" → [2, 2, 3],  "232" → [2, 3, 2]
+  if (!str.includes('+') && !str.includes('[')) {
+    return str.split('').map(Number);
+  }
+
   const tokens = [];
   let i = 0;
   while (i < str.length) {

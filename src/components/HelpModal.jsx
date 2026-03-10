@@ -158,27 +158,33 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
               }}>{line}</div>
             ))}
             {example && (
-              <div style={{ marginTop: 8, background: C.bgDark, borderRadius: 4, border: `1px solid ${C.border}`, padding: '8px 10px' }}>
-                <pre style={{ margin: 0, fontSize: 11, color: C.code, fontFamily: 'monospace', lineHeight: 1.7, whiteSpace: 'pre' }}>{example}</pre>
-                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <div style={{ marginTop: 8, position: 'relative', background: C.bgDark, borderRadius: 4, border: `1px solid ${C.border}`, padding: '8px 10px' }}>
+                {/* Icon buttons — top-right corner, within the block's vertical space */}
+                <div style={{ position: 'absolute', top: 5, right: 6, display: 'flex', gap: 4 }}>
                   <button
                     onClick={() => onRunExample(example)}
-                    title="Load and run this example"
+                    title="Load and play"
                     style={{
-                      background: C.greenDim, border: '1px solid #336644', color: C.green,
-                      padding: '4px 10px', cursor: 'pointer', borderRadius: 3,
-                      fontSize: 11, fontFamily: 'monospace', letterSpacing: 1,
+                      background: C.greenDim, border: `1px solid ${C.green}44`,
+                      color: C.green, borderRadius: 5,
+                      width: 22, height: 22, padding: 0,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, lineHeight: 1,
                     }}
-                  >▶ RUN</button>
+                  >▶</button>
                   <button
                     onClick={() => navigator.clipboard.writeText(example)}
+                    title="Copy to clipboard"
                     style={{
-                      background: C.bgMid, border: `1px solid ${C.border}`, color: C.textDim,
-                      padding: '4px 10px', cursor: 'pointer', borderRadius: 3,
-                      fontSize: 11, fontFamily: 'monospace', letterSpacing: 1,
+                      background: C.bgMid, border: `1px solid ${C.border}`,
+                      color: C.textDim, borderRadius: 5,
+                      width: 22, height: 22, padding: 0,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, lineHeight: 1,
                     }}
-                  >COPY</button>
+                  >⧉</button>
                 </div>
+                <pre style={{ margin: 0, fontSize: 11, color: C.code, fontFamily: 'monospace', lineHeight: 1.7, whiteSpace: 'pre', paddingRight: 52 }}>{example}</pre>
               </div>
             )}
           </div>
