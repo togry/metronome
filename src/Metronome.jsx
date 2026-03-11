@@ -710,7 +710,7 @@ export default function Metronome() {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: large ? 6 : 4, justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: mobile ? 11 : 13, color: C.textFaint, letterSpacing: 1 }}>m.</span>
+          <span style={{ fontSize: mobile ? 11 : 13, color: C.textFaint, letterSpacing: 1 }}>{t.labelMeasureShort}</span>
           <span style={{ fontSize: sz, color: C.gold, fontWeight: 'bold', lineHeight: 1 }}>{mn}</span>
           <span style={{ fontSize: mobile ? 13 : 16, color: C.gold, lineHeight: 1 }}>[{sig}]</span>
         </div>
@@ -788,29 +788,8 @@ export default function Metronome() {
           </div>
         )}
 
-        {/* Right controls: theme · help · locale dropdown — always rightmost */}
+        {/* Right controls: language · theme · ? help — ? rightmost/most prominent */}
         <div style={{ marginLeft: mobile ? 'auto' : 12, display: 'flex', alignItems: 'center', gap: mobile ? 6 : 8, flexShrink: 0 }}>
-          <button
-            onClick={() => setTheme(th => th === 'dark' ? 'light' : 'dark')}
-            title={theme === 'dark' ? t.btnThemeTitleToDaylight : t.btnThemeTitleToNight}
-            style={{
-              background: theme === 'dark' ? 'transparent' : C.borderHi,
-              border: `1px solid ${C.border}`, color: theme === 'dark' ? C.primary : C.bg,
-              borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 14, lineHeight: 1,
-              flexShrink: 0,
-            }}
-          >{theme === 'dark' ? t.btnThemeDark : t.btnThemeLight}</button>
-
-          <button
-            onClick={() => setShowHelp(true)}
-            title="Help"
-            style={{
-              background: 'transparent', border: `1px solid ${C.border}`,
-              color: C.textDim, borderRadius: '50%', width: 26, height: 26,
-              cursor: 'pointer', fontSize: 13, lineHeight: 1, flexShrink: 0,
-            }}
-          >{t.btnHelp}</button>
-
           {/* Locale: single flag button with dropdown */}
           <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button
@@ -855,6 +834,27 @@ export default function Metronome() {
               </div>
             )}
           </div>
+
+          <button
+            onClick={() => setTheme(th => th === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? t.btnThemeTitleToDaylight : t.btnThemeTitleToNight}
+            style={{
+              background: theme === 'dark' ? 'transparent' : C.borderHi,
+              border: `1px solid ${C.border}`, color: theme === 'dark' ? C.primary : C.bg,
+              borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >{theme === 'dark' ? t.btnThemeDark : t.btnThemeLight}</button>
+
+          <button
+            onClick={() => setShowHelp(true)}
+            title="Help"
+            style={{
+              background: 'transparent', border: `1px solid ${C.border}`,
+              color: C.textDim, borderRadius: '50%', width: 26, height: 26,
+              cursor: 'pointer', fontSize: 13, lineHeight: 1, flexShrink: 0,
+            }}
+          >{t.btnHelp}</button>
         </div>
       </div>
 
@@ -1004,7 +1004,6 @@ export default function Metronome() {
 
             {/* Measure readout — right side of row 1, both mobile and desktop */}
             <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-              {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{playing ? t.labelNow : t.labelMeasure}</div>}
               {measureReadout(!mobile)}
             </div>
           </div>
