@@ -3,7 +3,7 @@
 import { getPrimaryGroups, groupingShortLabel } from '../beatModel.js';
 
 export default function MeasureGrid({
-  C, mobile, portrait,
+  C, mobile, portrait, t,
   measures, playing, currentMeasure, previewMeasure,
   startMeasure, loopStart, loopEnd,
   onMeasureClick,
@@ -15,7 +15,7 @@ export default function MeasureGrid({
       minHeight: 0, touchAction: 'pan-y', WebkitOverflowScrolling: 'touch',
       ...(mobile && !portrait ? { flex: 'none', overflowY: 'visible', minHeight: 'unset' } : {}),
     }}>
-      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 6 }}>MEASURES</div>
+      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 6 }}>{t?.labelMeasures ?? 'MEASURES'}</div>
       <div style={{
         display: 'grid',
         gridTemplateColumns: mobile

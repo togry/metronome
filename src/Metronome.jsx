@@ -6,6 +6,8 @@ import { parseScore }                   from './parser.js';
 import { getBeatPattern, getPrimaryGroups, groupingShortLabel, groupingFullLabel, oneDenomUnitSec, tickDurationSec } from './beatModel.js';
 import { getTimelineEvents, computeLoopSeqBounds } from './timeline.js';
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
+import { getDefaultScore, getRitExampleScore, getTupletExampleScore, getStructureExampleScore } from './constants.js';
+import { useLocale, LOCALES } from './i18n/useLocale.js';
 
 import ScorePanel  from './components/ScorePanel.jsx';
 import HelpModal   from './components/HelpModal.jsx';
@@ -17,9 +19,35 @@ export default function Metronome() {
   const [theme, setTheme] = useState('dark');
   const C = PALETTES[theme];
 
+  // ── i18n ───────────────────────────────────────────────────────────────────
+  const [t, locale, setLocale] = useLocale();
+  const [localeDropdownOpen, setLocaleDropdownOpen] = useState(false);
+
+  // Close locale dropdown when clicking outside
+  useEffect(() => {
+    if (!localeDropdownOpen) return;
+    const close = () => setLocaleDropdownOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [localeDropdownOpen]);
+
+  // When locale changes, reload the default score if the user hasn't modified it
+  useEffect(() => {
+    const newDefault = getDefaultScore(t);
+    // Replace only if current text matches any known default score
+    const allDefaults = [getDefaultScore({}), newDefault];
+    if (allDefaults.some(d => scoreText.trim() === d.trim())) {
+      setScoreText(newDefault);
+      try {
+        const p = parseScore(newDefault, t);
+        setParsed(p); setParseError(''); setParseWarnings(p.warnings || []);
+      } catch (e) { setParseError(e.message); }
+    }
+  }, [locale]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Score ──────────────────────────────────────────────────────────────────
-  const [scoreText,     setScoreText]     = useState(DEFAULT_SCORE);
-  const [parsed,        setParsed]        = useState(() => parseScore(DEFAULT_SCORE));
+  const [scoreText,     setScoreText]     = useState(() => getDefaultScore({}));
+  const [parsed,        setParsed]        = useState(() => parseScore(getDefaultScore({})));
   const [parseError,    setParseError]    = useState('');
   const [parseWarnings, setParseWarnings] = useState([]);
   const [scoreWidth,    setScoreWidth]    = useState(270);
@@ -445,7 +473,7 @@ export default function Metronome() {
   // ── Parse handlers ─────────────────────────────────────────────────────────
   function handleParse() {
     try {
-      const p = parseScore(scoreText);
+      const p = parseScore(scoreText, t);
       setParsed(p);
       setParseError('');
       setParseWarnings(p.warnings || []);
@@ -459,7 +487,7 @@ export default function Metronome() {
       const text = await navigator.clipboard.readText();
       setScoreText(text);
       try {
-        const p = parseScore(text);
+        const p = parseScore(text, t);
         setParsed(p); setParseError(''); setParseWarnings(p.warnings || []);
         setStartMeasure(1); setPreviewMeasure(1);
         setLoopStart(null); setLoopEnd(null);
@@ -473,7 +501,7 @@ export default function Metronome() {
   function handleRunExample(example) {
     setScoreText(example);
     try {
-      const p = parseScore(example);
+      const p = parseScore(example, t);
       setParsed(p); setParseError(''); setParseWarnings(p.warnings || []);
       setStartMeasure(1); setPreviewMeasure(1);
       setLoopStart(null); setLoopEnd(null);
@@ -697,7 +725,7 @@ export default function Metronome() {
   // ── Score panel (shared between desktop sidebar and mobile overlay) ─────────
   const scorePanel = (
     <ScorePanel
-      C={C} mobile={mobile}
+      C={C} mobile={mobile} t={t}
       scoreText={scoreText} setScoreText={setScoreText}
       parseError={parseError} parseWarnings={parseWarnings}
       onParse={() => { handleParse(); if (mobile) setShowScore(false); }}
@@ -719,66 +747,114 @@ export default function Metronome() {
       {/* ── Header ── */}
       <div style={{
         borderBottom: `1px solid ${C.border}`,
-        padding: mobile ? '10px 14px' : '12px 22px',
-        display: 'flex', alignItems: 'center', gap: 10,
+        padding: mobile ? '8px 12px' : '12px 22px',
+        display: 'flex', alignItems: 'center', gap: mobile ? 6 : 10,
         background: C.bgMid, flexShrink: 0,
       }}>
         {mobile && (
           <button onClick={() => setShowScore(true)} style={{
             background: 'transparent', border: `1px solid ${C.border}`,
             color: C.code, padding: '6px 10px', cursor: 'pointer',
-            borderRadius: 3, fontSize: 12, letterSpacing: 1,
-          }}>SCORE</button>
+            borderRadius: 3, fontSize: 12, letterSpacing: 1, flexShrink: 0,
+          }}>{t.btnScore}</button>
         )}
-        <div style={{ fontSize: mobile ? 14 : 17, letterSpacing: 4, color: C.gold, fontWeight: 'bold' }}>♩ METRONOMICON</div>
-        {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>SCORE-AWARE METRONOME</div>}
+        <div style={{ fontSize: mobile ? 13 : 17, letterSpacing: mobile ? 2 : 4, color: C.gold, fontWeight: 'bold', flexShrink: 0 }}>{t.appTitle}</div>
+        {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>{t.appSubtitle}</div>}
 
-        <button
-          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-          title={theme === 'dark' ? 'Switch to daylight palette' : 'Switch to night palette'}
-          style={{
-            background: theme === 'dark' ? 'transparent' : C.borderHi,
-            border: `1px solid ${C.border}`, color: theme === 'dark' ? C.primary : C.bg,
-            borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 14, lineHeight: 1,
-            marginLeft: mobile ? 4 : 8,
-          }}
-        >{theme === 'dark' ? '☀' : '🌙'}</button>
-
-        <button
-          onClick={() => setShowHelp(true)}
-          title="Help"
-          style={{
-            background: 'transparent', border: `1px solid ${C.border}`,
-            color: C.textDim, borderRadius: '50%', width: 26, height: 26,
-            cursor: 'pointer', fontSize: 13, lineHeight: 1,
-            marginLeft: mobile ? 4 : 8, flexShrink: 0,
-          }}
-        >?</button>
-
-        {/* Beat flash indicators */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: mobile ? 8 : 10, alignItems: 'center' }}>
-          {[
-            { key: 'measure', col: C.measure, label: 'MEAS' },
-            { key: 'primary', col: C.primary, label: 'BEAT' },
-            { key: 'unit',    col: C.unit,    label: 'UNIT' },
-          ].map(({ key, col, label }) => (
-            <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-              <div style={{ width: mobile ? 22 : 24, height: mobile ? 22 : 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div
-                  ref={el => { if (el) flashDotsRef.current[key] = el; }}
-                  style={{
-                    width: mobile ? '11px' : '13px',
-                    height: mobile ? '11px' : '13px',
-                    borderRadius: '50%',
-                    background: col + '28',
-                    border: `1px solid ${col}55`,
-                    boxShadow: 'none',
-                  }}
-                />
+        {/* Desktop: flash dots (left of right controls) */}
+        {!mobile && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+            {[
+              { key: 'measure', col: C.measure, label: t.flashLabelMeas },
+              { key: 'primary', col: C.primary, label: t.flashLabelBeat },
+              { key: 'unit',    col: C.unit,    label: t.flashLabelUnit },
+            ].map(({ key, col, label }) => (
+              <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <div style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div
+                    ref={el => { if (el) flashDotsRef.current[key] = el; }}
+                    style={{
+                      width: '13px', height: '13px',
+                      borderRadius: '50%',
+                      background: col + '28',
+                      border: `1px solid ${col}55`,
+                      boxShadow: 'none',
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 1 }}>{label}</div>
               </div>
-              {!mobile && <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 1 }}>{label}</div>}
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
+
+        {/* Right controls: theme · help · locale dropdown — always rightmost */}
+        <div style={{ marginLeft: mobile ? 'auto' : 12, display: 'flex', alignItems: 'center', gap: mobile ? 6 : 8, flexShrink: 0 }}>
+          <button
+            onClick={() => setTheme(th => th === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? t.btnThemeTitleToDaylight : t.btnThemeTitleToNight}
+            style={{
+              background: theme === 'dark' ? 'transparent' : C.borderHi,
+              border: `1px solid ${C.border}`, color: theme === 'dark' ? C.primary : C.bg,
+              borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >{theme === 'dark' ? t.btnThemeDark : t.btnThemeLight}</button>
+
+          <button
+            onClick={() => setShowHelp(true)}
+            title="Help"
+            style={{
+              background: 'transparent', border: `1px solid ${C.border}`,
+              color: C.textDim, borderRadius: '50%', width: 26, height: 26,
+              cursor: 'pointer', fontSize: 13, lineHeight: 1, flexShrink: 0,
+            }}
+          >{t.btnHelp}</button>
+
+          {/* Locale: single flag button with dropdown */}
+          <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setLocaleDropdownOpen(v => !v)}
+              style={{
+                background: localeDropdownOpen ? C.borderHi : 'transparent',
+                border: `1px solid ${localeDropdownOpen ? C.borderHi : C.border}`,
+                color: C.gold,
+                borderRadius: 3, padding: '3px 8px', cursor: 'pointer',
+                fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', gap: 3,
+              }}
+              title="Language / Språk"
+            >
+              {LOCALES[locale].flag}
+              <span style={{ fontSize: 8, color: C.textFaint }}>▾</span>
+            </button>
+            {localeDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute', top: '110%', right: 0,
+                  background: C.bgMid, border: `1px solid ${C.border}`,
+                  borderRadius: 4, zIndex: 100, minWidth: 120,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden',
+                }}
+              >
+                {Object.keys(LOCALES).map(code => (
+                  <button key={code}
+                    onClick={() => { setLocale(code); setLocaleDropdownOpen(false); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', background: locale === code ? C.borderHi : 'transparent',
+                      border: 'none', borderBottom: `1px solid ${C.border}`,
+                      color: locale === code ? C.gold : C.text,
+                      padding: '8px 12px', cursor: 'pointer',
+                      fontSize: 13, fontFamily: 'monospace', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontSize: 16 }}>{LOCALES[code].flag}</span>
+                    <span>{LOCALES[code].label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -787,7 +863,7 @@ export default function Metronome() {
 
       {/* Help modal */}
       {showHelp && (
-        <HelpModal C={C} mobile={mobile} onClose={() => setShowHelp(false)} onRunExample={handleRunExample} />
+        <HelpModal C={C} mobile={mobile} t={t} onClose={() => setShowHelp(false)} onRunExample={handleRunExample} />
       )}
 
       {/* ── Body ── */}
@@ -817,9 +893,9 @@ export default function Metronome() {
         {/* ── Main panel ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0, ...(mobile && !portrait ? { overflow: 'visible', minHeight: 'unset' } : {}) }}>
 
-          {/* Controls row 1: play, count-in, measure readout */}
+          {/* Controls row 1: play, count-in, measure readout — desktop only for play+countin */}
           <div style={{
-            padding: mobile ? '8px 12px' : '12px 20px',
+            padding: mobile ? '6px 12px' : '12px 20px',
             borderBottom: `1px solid ${C.border}`,
             display: 'flex', gap: mobile ? 8 : 18,
             alignItems: mobile ? 'center' : 'flex-end',
@@ -827,19 +903,57 @@ export default function Metronome() {
             background: C.bgMid, flexShrink: 0,
             ...(mobile && !portrait ? { flexWrap: 'wrap' } : {}),
           }}>
+            {/* Play button — always here; on mobile this is row 2 */}
             <button ref={playBtnRef} onClick={handlePlay} style={{
               background: playing ? C.redDim : C.greenDim,
               border: `2px solid ${playing ? C.red : C.green}`,
               color: countingIn ? C.gold : playing ? (theme === 'light' ? C.red : '#ff8888') : C.green,
-              padding: mobile ? '12px 18px' : '9px 22px',
+              padding: mobile ? '8px 16px' : '9px 22px',
               cursor: 'pointer', borderRadius: 4,
               fontSize: mobile ? 16 : 13, letterSpacing: 3,
-              fontFamily: 'monospace', minWidth: mobile ? 90 : 100, flexShrink: 0,
+              fontFamily: 'monospace', minWidth: mobile ? 'unset' : 100, flexShrink: 0,
             }}>
-              {countingIn ? `${countInRemaining}…` : playing ? '◼' : '▶'}
+              {countingIn ? `${countInRemaining}…` : playing ? t.btnStop : t.btnPlay}
             </button>
 
-            {/* Count-in */}
+            {/* Count-in — compact on mobile, full on desktop */}
+            {mobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox" checked={countInEnabled}
+                    onChange={e => setCountInEnabled(e.target.checked)}
+                    style={{ accentColor: C.green, cursor: 'pointer', width: 15, height: 15 }}
+                  />
+                  <span style={{ fontSize: 9, color: countInEnabled ? C.green : C.textFaint, letterSpacing: 1, userSelect: 'none' }}>
+                    {t.labelCountIn}
+                  </span>
+                </label>
+                {countInEnabled && (
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <select value={countInBeats} onChange={e => setCountInBeats(parseInt(e.target.value))}
+                      style={{ ...selectStyle, width: 48 }}>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                      <option value={4}>4</option>
+                    </select>
+                    <select value={countInDenom} onChange={e => setCountInDenom(parseInt(e.target.value))}
+                      style={{ ...selectStyle, width: 68 }}>
+                      <option value={4}>{t.countInDenom4}</option>
+                      <option value={8}>{t.countInDenom8}</option>
+                    </select>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox" checked={countInOnRepeat}
+                        onChange={e => setCountInOnRepeat(e.target.checked)}
+                        style={{ accentColor: C.green, cursor: 'pointer', width: 14, height: 14 }}
+                      />
+                      <span style={{ fontSize: 9, color: countInOnRepeat ? C.green : C.textDim, letterSpacing: 1 }}>{t.labelOnRepeat}</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            ) : (
             <div style={{
               display: 'flex', flexDirection: 'column', gap: 4,
               padding: '5px 8px',
@@ -852,23 +966,23 @@ export default function Metronome() {
                 <input
                   type="checkbox" checked={countInEnabled}
                   onChange={e => setCountInEnabled(e.target.checked)}
-                  style={{ accentColor: C.green, cursor: 'pointer', width: mobile ? 16 : 13, height: mobile ? 16 : 13, flexShrink: 0 }}
+                  style={{ accentColor: C.green, cursor: 'pointer', width: 13, height: 13, flexShrink: 0 }}
                 />
-                <span style={{ fontSize: mobile ? 10 : 9, color: countInEnabled ? C.green : C.textFaint, letterSpacing: 1, cursor: 'pointer', userSelect: 'none', flexShrink: 0 }}
+                <span style={{ fontSize: 9, color: countInEnabled ? C.green : C.textFaint, letterSpacing: 1, cursor: 'pointer', userSelect: 'none', flexShrink: 0 }}
                   onClick={() => setCountInEnabled(v => !v)}>
-                  COUNT IN
+                  {t.labelCountIn}
                 </span>
                 {countInEnabled && <>
                   <select value={countInBeats} onChange={e => setCountInBeats(parseInt(e.target.value))}
-                    style={{ ...selectStyle, width: mobile ? 48 : 52 }}>
+                    style={{ ...selectStyle, width: 52 }}>
                     <option value={2}>2</option>
                     <option value={3}>3</option>
                     <option value={4}>4</option>
                   </select>
                   <select value={countInDenom} onChange={e => setCountInDenom(parseInt(e.target.value))}
-                    style={{ ...selectStyle, width: mobile ? 64 : 62 }}>
-                    <option value={4}>4ths</option>
-                    <option value={8}>8ths</option>
+                    style={{ ...selectStyle, width: 62 }}>
+                    <option value={4}>{t.countInDenom4}</option>
+                    <option value={8}>{t.countInDenom8}</option>
                   </select>
                 </>}
               </div>
@@ -878,18 +992,19 @@ export default function Metronome() {
                   <input
                     type="checkbox" checked={countInOnRepeat}
                     onChange={e => setCountInOnRepeat(e.target.checked)}
-                    style={{ accentColor: C.green, cursor: 'pointer', width: mobile ? 14 : 11, height: mobile ? 14 : 11 }}
+                    style={{ accentColor: C.green, cursor: 'pointer', width: 11, height: 11 }}
                   />
-                  <span style={{ fontSize: mobile ? 9 : 8, color: countInOnRepeat ? C.green : C.textDim, letterSpacing: 1 }}>
-                    ON REPEAT
+                  <span style={{ fontSize: 8, color: countInOnRepeat ? C.green : C.textDim, letterSpacing: 1 }}>
+                    {t.labelOnRepeat}
                   </span>
                 </label>
               )}
             </div>
+            )}
 
             {/* Measure readout — right side of row 1, both mobile and desktop */}
             <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-              {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{playing ? 'NOW' : 'M.'}</div>}
+              {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{playing ? t.labelNow : t.labelMeasure}</div>}
               {measureReadout(!mobile)}
             </div>
           </div>
@@ -907,21 +1022,23 @@ export default function Metronome() {
           }}>
             {/* Subdivide */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>SUBDIVIDE</label>
+              <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{t.labelSubdivide}</label>
               <select value={subdivIdx} onChange={e => setSubdivIdx(parseInt(e.target.value))}
                 style={{ ...selectStyle, minWidth: mobile ? 160 : 180 }}>
-                {SUBDIV_OPTIONS.map((o, i) => <option key={i} value={i}>{o.label}</option>)}
+                {SUBDIV_OPTIONS.map((o, i) => (
+                  <option key={i} value={i}>{(t.subdivOptions && t.subdivOptions[i]) || o.label}</option>
+                ))}
               </select>
             </div>
 
             {/* Tempo */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: mobile ? 1 : 'unset' }}>
               <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>
-                TEMPO &nbsp;
+                {t.labelTempo} &nbsp;
                 <span style={{ color: C.gold, fontSize: 11 }}>{tempoScale}%</span>
                 {previewMs && (
                   <span style={{ color: C.textDim, fontSize: 10 }}>
-                    &nbsp;= {Math.round(previewMs.tempoBPM * tempoScale / 100)} bpm
+                    &nbsp;= {Math.round(previewMs.tempoBPM * tempoScale / 100)} {t.labelBpm}
                   </span>
                 )}
               </label>
@@ -939,7 +1056,7 @@ export default function Metronome() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <label style={{ fontSize: 9, color: active ? C.unit : C.textFaint, letterSpacing: 1,
                       cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowBtSlider(false)}>
-                      BT <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span> ▲
+                      {t.labelBt} <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span> ▲
                     </label>
                     {active && (
                       <button onClick={() => setBtLatency(0)} style={{
@@ -962,7 +1079,7 @@ export default function Metronome() {
                   borderRadius: 3, padding: '3px 7px', cursor: 'pointer',
                   fontSize: 9, letterSpacing: 1, alignSelf: 'flex-end', marginBottom: 2,
                 }}>
-                  BT{active ? ` ${btLatency}` : ''}
+                  {t.labelBt}{active ? ` ${btLatency}` : ''}
                 </button>
               );
             })()}
@@ -977,9 +1094,9 @@ export default function Metronome() {
             ...(mobile && !portrait ? { flexShrink: 0 } : {}),
           }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1, marginBottom: 8, display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-              <span>PATTERN</span>
+              <span>{t.labelPattern}</span>
               <span style={{ color: C.gold }}>
-                m.{previewMeasure}
+                {t.labelMeasureShort}{previewMeasure}
                 {measures[previewMeasure]?.rehearsal && (
                   <span style={{ color: C.reh }}> [{measures[previewMeasure].rehearsal}]</span>
                 )}
@@ -990,15 +1107,15 @@ export default function Metronome() {
                 const groupLabel = hasTuplet
                   ? groupingFullLabel(groups)
                   : groups.join('+');
-                const clicks = previewPattern.filter(t => t.weight > 0).length;
+                const clicks = previewPattern.filter(tk => tk.weight > 0).length;
                 return (
                   <span style={{ color: C.textDim }}>
                     {groupLabel} × {previewMs.denominator === 2 ? '½' : previewMs.denominator === 4 ? '¼' : `1/${previewMs.denominator}`}
-                    {' → '}{clicks} click{clicks !== 1 ? 's' : ''}
+                    {' → '}{t.patternClicks(clicks)}
                   </span>
                 );
               })()}
-              {loopEnd !== null && <span style={{ color: C.orange }}>↺ m.{loopStart ?? startMeasure}–{loopEnd - 1}</span>}
+              {loopEnd !== null && <span style={{ color: C.orange }}>{t.loopRange(loopStart ?? startMeasure, loopEnd - 1)}</span>}
             </div>
             <div style={{ display: 'flex', gap: mobile ? 6 : 5, flexWrap: 'wrap', alignItems: 'center' }}
               ref={() => { patternDotsRef.current.length = previewPattern.length; }}
@@ -1039,7 +1156,7 @@ export default function Metronome() {
 
           {/* Timeline */}
           <Timeline
-            C={C} mobile={mobile}
+            C={C} mobile={mobile} t={t}
             totalMeasures={totalMeasures}
             timelineContentWidth={timelineContentWidth}
             pxPerSlot={pxPerSlot}
@@ -1063,7 +1180,7 @@ export default function Metronome() {
             background: C.bgMid, flexShrink: 0,
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>START</label>
+              <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{t.labelStart}</label>
               <input type="number" min={1} max={totalMeasures} value={startMeasure}
                 onChange={e => {
                   const v = Math.max(1, parseInt(e.target.value) || 1);
@@ -1080,7 +1197,7 @@ export default function Metronome() {
             {loopEnd !== null && (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>LOOP END</label>
+                  <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>{t.labelLoopEnd}</label>
                   <input type="number" min={startMeasure + 1} max={totalMeasures} value={loopEnd}
                     onChange={e => setLoopEnd(Math.max(startMeasure + 1, parseInt(e.target.value) || startMeasure + 1))}
                     style={{
@@ -1095,17 +1212,17 @@ export default function Metronome() {
                   padding: mobile ? '8px 12px' : '4px 10px',
                   cursor: 'pointer', borderRadius: 3, fontSize: 11, letterSpacing: 1,
                   fontFamily: 'monospace', marginTop: mobile ? 0 : 14,
-                }}>CLEAR LOOP</button>
+                }}>{t.btnClearLoop}</button>
               </>
             )}
             <div style={{ marginLeft: 'auto', fontSize: 10, color: C.textDim }}>
-              {loopEnd !== null ? `↺ m.${loopStart ?? startMeasure}–${loopEnd}` : `start m.${startMeasure}`}
+              {loopEnd !== null ? t.loopRange(loopStart ?? startMeasure, loopEnd) : t.startAt(startMeasure)}
             </div>
           </div>
 
           {/* Measure grid */}
           <MeasureGrid
-            C={C} mobile={mobile} portrait={portrait}
+            C={C} mobile={mobile} portrait={portrait} t={t}
             measures={measures}
             playing={playing}
             currentMeasure={currentMeasure}

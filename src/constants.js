@@ -59,7 +59,7 @@ export const PALETTES = {
 
 // ─── Example scores ───────────────────────────────────────────────────────────
 
-export const RIT_EXAMPLE_SCORE = `1| 4/4 1/4=160
+export const getRitExampleScore = (t) => t.exampleRit ?? `1| 4/4 1/4=160
 3| rit 1/4=60
 7| 1/4=60 accel 1/4=160
 8| 3/4
@@ -67,7 +67,7 @@ export const RIT_EXAMPLE_SCORE = `1| 4/4 1/4=160
 11| 9/8
 15| 3/4 1/4=160`;
 
-export const TUPLET_EXAMPLE_SCORE = `1: 4/4 1/4=90
+export const getTupletExampleScore = (t) => t.exampleTuplet ?? `1: 4/4 1/4=90
 3: (1+1+2[3:111])          # triplets of 1/4ths
 5: (1+1+[3:111]+[3:111])   # triplets of 1/8ths
 7: (1+1+2[5:11111])        # quintuplets
@@ -83,7 +83,7 @@ export const TUPLET_EXAMPLE_SCORE = `1: 4/4 1/4=90
 23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
 25:`;
 
-export const STRUCTURE_EXAMPLE_SCORE = `1|: 4/4 1/4=90       # |: opens a repeat section
+export const getStructureExampleScore = (t) => t.exampleStructure ?? `1|: 4/4 1/4=90       # |: opens a repeat section
 8:| [A]               # :| closes it; rehearsal mark A
 9|: $ 7/8 (223)       # $ = segno; new repeat, odd meter
 16:|| [B]              # :|| closes repeat + double barline
@@ -94,8 +94,14 @@ export const STRUCTURE_EXAMPLE_SCORE = `1|: 4/4 1/4=90       # |: opens a repeat
 33| Coda               # coda section starts here
 36||                   # end of score`;
 
-export const DEFAULT_SCORE = `1| 4/4 1/4=90
+export const getDefaultScore = (t) => t.defaultScore ?? `1| 4/4 1/4=90
 5| 3/4
 9| 7/8 (223)
 12|  # Repeat indefinitely
 # Click "?" for more examples`;
+
+// Legacy named exports kept for backward compatibility — use locale-aware getters above
+export const RIT_EXAMPLE_SCORE       = getRitExampleScore({});
+export const TUPLET_EXAMPLE_SCORE    = getTupletExampleScore({});
+export const STRUCTURE_EXAMPLE_SCORE = getStructureExampleScore({});
+export const DEFAULT_SCORE           = getDefaultScore({});

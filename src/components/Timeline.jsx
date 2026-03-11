@@ -1,7 +1,7 @@
 // ─── Timeline strip ───────────────────────────────────────────────────────────
 
 export default function Timeline({
-  C, mobile,
+  C, mobile, t,
   totalMeasures, timelineContentWidth, pxPerSlot, measPx,
   timelineEvents,
   loopStart, loopEnd, startMeasure, currentMeasure, playing,
@@ -18,8 +18,8 @@ export default function Timeline({
     <div style={{ padding: mobile ? '6px 12px 2px' : '8px 20px 2px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
       <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 4, letterSpacing: 1 }}>
         {mobile
-          ? 'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll'
-          : 'TIMELINE · click = set start · drag = loop · shift-click = set loop end'}
+          ? (t?.timelineHintMobile  ?? 'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll')
+          : (t?.timelineHintDesktop ?? 'TIMELINE · click = set start · drag = loop · shift-click = set loop end')}
       </div>
 
       {/* Outer scroll container */}

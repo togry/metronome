@@ -28,7 +28,14 @@ const no = {
   countInDenom8:   '8-deler',
 
   // ── Controls row 2 ──────────────────────────────────────────────────────────
-  labelSubdivide:  'INNDELING',
+  labelSubdivide:  'UNDERDELING',
+  subdivOptions: [
+    'Bare primærslag',
+    'Inndelt i 4-deler',
+    'Inndelt i 8-deler',
+    'Inndelt i 16-deler',
+    'Inndelt i 32-deler',
+  ],
   labelTempo:      'TEMPO',
   labelBpm:        'slag/min',
   labelBt:         'BT',
@@ -43,6 +50,55 @@ const no = {
   btnClearLoop:    'SLETT LØKKE',
   loopRange:       (s, e) => `↺ t.${s}–${e}`,
   startAt:         (m)    => `start t.${m}`,
+
+  // ── Timeline ─────────────────────────────────────────────────────────────────
+  timelineHintDesktop: 'TIDSLINJE · klikk = sett start · dra = løkke · shift-klikk = sett løkke slutt',
+  timelineHintMobile:  'TIDSLINJE · trykk=start · dbl-dra=løkke · 2-finger=rull',
+
+  // ── Taktrutenett ─────────────────────────────────────────────────────────────
+  labelMeasures:   'TAKTER',
+
+  // ── Eksempelpartiturer ───────────────────────────────────────────────────────
+  defaultScore: `1| 4/4 1/4=90
+5| 3/4
+9| 7/8 (223)
+12|  # Gjentar i det uendelige
+# Klikk «?» for flere eksempler`,
+
+  exampleRit: `1| 4/4 1/4=160
+3| rit 1/4=60
+7| 1/4=60 accel 1/4=160
+8| 3/4
+9| 7/8 (2+2+3)
+11| 9/8
+15| 3/4 1/4=160`,
+
+  exampleTuplet: `1: 4/4 1/4=90
+3: (1+1+2[3:111])          # trioler av 4-deler
+5: (1+1+[3:111]+[3:111])   # trioler av 8-deler
+7: (1+1+2[5:11111])        # kvintolur
+9: ([3:21])                       # swing-slag (gjentas ×4)
+11: ([4:31])                         # punktert 8-del + 16-del (×4)
+13: ([8:71])                         # dobbeltpunkert 8-del + 32-del (×4)
+# mønstre med pauser
+15: (1+1+[3:.11]+[3:.11])           # trioler med pause på første delslag
+17: (1+1+[4:..11]+[4:..11])         # 8-dels pause + to 16-deler
+19: (1+1+[3:1.1]+[3:1.1])           # trioler med pause på midtre delslag
+21: ([3:.11]+[4:.111]+[5:.1111]+[6:.11111])
+# Et særlig krevende mønster
+23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
+25:`,
+
+  exampleStructure: `1|: 4/4 1/4=90       # |: åpner en repetisjon
+8:| [A]               # :| lukker den; prøvemerke A
+9|: $ 7/8 (223)       # $ = segno; ny repetisjon, odde taktart
+16:|| [B]              # :|| lukker repetisjon + dobbel taktlinje
+17|: 4/4               # åpner ny repetisjon
+24:| @                 # lukker repetisjon; @ = coda-hoppunkt
+25| [C] 1/4=120        # ny seksjon, raskere
+32| DS al Coda         # tilbake til $; ved retur hopp til @
+33| Coda               # coda-seksjonen starter her
+36||                   # slutt på partitur`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   warnGroupingNotDivisible: (mn, units, num, den) =>
