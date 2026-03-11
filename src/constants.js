@@ -97,4 +97,5 @@ export const STRUCTURE_EXAMPLE_SCORE = `1|: 4/4 1/4=90       # |: opens a repeat
 export const DEFAULT_SCORE = `1| 4/4 1/4=90
 5| 3/4
 9| 7/8 (223)
-13|`;
+12|  # Repeat indefinitely
+# Click "?" for more examples`;
