@@ -3,6 +3,6 @@ import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
 export default defineConfig({
-  base: '/metronome/',
-  plugins: [react(), viteSingleFile()],
+    base: process.env.VITE_BASE_PATH || '/metronome/',
+    plugins: [react(), viteSingleFile()],
 })
