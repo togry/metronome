@@ -1,0 +1,11 @@
+{
+  "name": "Metronomicon",
+  "short_name": "Metronomicon",
+  "description": "Score-aware metronome",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a14",
+  "theme_color": "#0a0a14",
+  "start_url": "/metronome/",
+  "scope": "/metronome/"
+}

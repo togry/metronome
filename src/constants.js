@@ -83,13 +83,18 @@ export const TUPLET_EXAMPLE_SCORE = `1: 4/4 1/4=90
 23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
 25:`;
 
-export const DEFAULT_SCORE = `1|: 4/4, 1/4=90      # |: opens a repeat section
-8:| [A]              # :| closes it; rehearsal mark A
-9|: $ 7/8 (2+2+3)   # $ = segno; new repeat, odd meter
-16:|| [B]             # :|| closes repeat; || marks section boundary; rehearsal mark B
-17|: 4/4              # |: opens new repeat section
-24:| @               # close repeat; @ = coda jump point on D.S. pass
-25| [C] 1/4=120      # new section, faster
-32| DS al Coda       # go back to $ (segno), on return jump to @
-33| Coda             # coda section starts here
-36||                 # end of score (last double barline)`;
+export const STRUCTURE_EXAMPLE_SCORE = `1|: 4/4 1/4=90       # |: opens a repeat section
+8:| [A]               # :| closes it; rehearsal mark A
+9|: $ 7/8 (223)       # $ = segno; new repeat, odd meter
+16:|| [B]              # :|| closes repeat + double barline
+17|: 4/4               # open new repeat section
+24:| @                 # close repeat; @ = coda jump point
+25| [C] 1/4=120        # new section, faster
+32| DS al Coda         # go back to $; on return jump to @
+33| Coda               # coda section starts here
+36||                   # end of score`;
+
+export const DEFAULT_SCORE = `1| 4/4 1/4=90
+5| 3/4
+9| 7/8 (223)
+13|`;

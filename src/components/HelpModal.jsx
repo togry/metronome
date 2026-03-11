@@ -1,6 +1,6 @@
 // ─── Help modal ───────────────────────────────────────────────────────────────
 
-import { RIT_EXAMPLE_SCORE, TUPLET_EXAMPLE_SCORE } from '../constants.js';
+import { RIT_EXAMPLE_SCORE, TUPLET_EXAMPLE_SCORE, STRUCTURE_EXAMPLE_SCORE } from '../constants.js';
 
 export default function HelpModal({ C, onClose, onRunExample, mobile }) {
   const sections = [
@@ -47,7 +47,7 @@ export default function HelpModal({ C, onClose, onRunExample, mobile }) {
       'DS al Coda    Jump to $; at @ jump to Coda section',
       'Place $ (segno) and @ (coda jump point) on their measure lines.',
       'The Coda section is skipped on the first pass.',
-    ]},
+    ], example: STRUCTURE_EXAMPLE_SCORE },
     { h: 'Rit / Accel', body: [
       "Add 'rit' or 'accel' with a target tempo to begin a smooth",
       "tempo curve. Spans to the next tempo mark or 'a tempo'.",
