@@ -94,7 +94,8 @@ export const STRUCTURE_EXAMPLE_SCORE = `1|: 4/4 1/4=90       # |: opens a repeat
 33| Coda               # coda section starts here
 36||                   # end of score`;
 
-export const DEFAULT_SCORE = `1: 4/4 1/4=90
-2:
-3:
-4:`;
+export const DEFAULT_SCORE = `1| 4/4 1/4=90
+5| 3/4
+9| 7/8 (223)
+12|  # Repeat indefinitely
+# Click "?" for more examples`;

@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: sudo apt-get install -y librsvg2-bin
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

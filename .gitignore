@@ -22,6 +22,11 @@ venv/
 .DS_Store
 Thumbs.db
 
+# generated files
+public/icon-192.png
+public/icon-512.png
+public/apple-touch-icon.png
+
 # Node.js
 dist/
 node_modules/
