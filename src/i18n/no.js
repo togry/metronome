@@ -30,7 +30,7 @@ const no = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'UNDERDELING',
   subdivOptions: [
-    'Bare primærslag',
+    'Bare grunnslag',
     '4-deler',
     '8-deler',
     '16-deler',
@@ -130,7 +130,7 @@ const no = {
   helpSections: [
     { h: 'Taktarter', body: [
       'Standard: 4/4  3/4  6/8  2/2  12/8',
-      'Sammensatte takter (6/8, 12/8): primærslag = punktert firedel automatisk.',
+      'Sammensatte takter (6/8, 12/8): grunnslag = punktert firedel automatisk.',
       'Odde taktarter: legg til gruppering, f.eks.  7/8 (2+2+3)  eller  5/8 (2+3)',
       'Grupperinger huskes per taktart gjennom hele stykket.',
     ]},
@@ -206,7 +206,7 @@ const no = {
       '▶ / ◼  Spill og stopp.',
       'OPPSLAG  Legger til oppslag før avspilling; velg antall slag og noteverdi.',
       '  VED REPETISJON: legg også til oppslag ved hver løkke- eller stykkerepetisjon.',
-      'UNDERDELING  Bare primærslag, eller underdelt til 4-deler / 8-deler / 16-deler / 32-deler.',
+      'UNDERDELING  Bare grunnslag, eller underdelt til 4-deler / 8-deler / 16-deler / 32-deler.',
       '  Underklikk legges bare til der et slag kan deles likt.',
       'TEMPO velg fra 10% til 150 % av angitt tempo.',
       '☀ / 🌙  Veksle mellom mørkt og lyst tema.',
