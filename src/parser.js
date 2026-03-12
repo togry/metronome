@@ -97,7 +97,7 @@ function parseGrouping(str) {
 // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
 const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
 
-export function parseScore(text) {
+export function parseScore(text, t) {
   const lines = text.split('\n')
     .map(l => l.replace(/\s*(\/\/|#).*$/, '').trim())
     .filter(l => l);
@@ -238,7 +238,7 @@ export function parseScore(text) {
             const reps = newNum / elemUnits;
             g = Array.from({ length: reps }, () => g[0]);
           } else {
-            warnings.push(`m.${mn}: grouping element (${elemUnits} unit${elemUnits !== 1 ? 's' : ''}) does not divide ${newNum}/${newDen} evenly — grouping ignored`);
+            warnings.push(t ? t.warnGroupingNotDivisible(mn, elemUnits, newNum, newDen) : `m.${mn}: grouping element (${elemUnits} unit${elemUnits !== 1 ? 's' : ''}) does not divide ${newNum}/${newDen} evenly — grouping ignored`);
             g = null;
           }
         }
@@ -313,10 +313,10 @@ export function parseScore(text) {
       } else if (endBPM !== null && !isAtempo) {
         targetBPM = endBPM; targetDenom = endDenom; targetDotted = endDotted;
       } else if (c.ritTargetBPM === undefined && isAtempo) {
-        warnings.push(`m.${startMn}: 'rit'/'accel' needs a target tempo, e.g. rit 1/4=60`);
+        warnings.push(t ? t.warnRitNeedsTarget(startMn) : `m.${startMn}: 'rit'/'accel' needs a target tempo, e.g. rit 1/4=60`);
         continue;
       } else {
-        warnings.push(`m.${startMn}: 'rit'/'accel' has no target tempo and no following tempo mark`);
+        warnings.push(t ? t.warnRitNoTarget(startMn) : `m.${startMn}: 'rit'/'accel' has no target tempo and no following tempo mark`);
         continue;
       }
 
@@ -324,7 +324,7 @@ export function parseScore(text) {
         if (c.ritTargetBPM) {
           endMn = endAt + 1;
         } else {
-          warnings.push(`m.${startMn}: 'rit'/'accel' has no following tempo mark or 'a tempo'`);
+          warnings.push(t ? t.warnRitNoFollowing(startMn) : `m.${startMn}: 'rit'/'accel' has no following tempo mark or 'a tempo'`);
           continue;
         }
       }
@@ -390,10 +390,10 @@ export function parseScore(text) {
           repeatPairs[n] = stack.pop();
         } else if (isClose) {
           if (anyRepeatSeen)
-            warnings.push(`m.${n}: close-repeat ':|' has no matching open repeat`);
+            warnings.push(t ? t.warnCloseRepeatNoOpen(n) : `m.${n}: close-repeat ':|' has no matching open repeat`);
           repeatPairs[n] = 1;
         } else {
-          warnings.push(`m.${n}: ':||' has no matching open repeat — use '||' to end the score`);
+          warnings.push(t ? t.warnDoubleBarNoOpen(n) : `m.${n}: ':||' has no matching open repeat — use '||' to end the score`);
         }
       }
       if (sep === '|:' || sep === '||:') { stack.push(n); anyRepeatSeen = true; }

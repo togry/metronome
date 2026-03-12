@@ -28,6 +28,13 @@ const en = {
 
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'SUBDIVIDE',
+  subdivOptions: [
+    'Primary beats',
+    'Subdivided to 4ths',
+    'Subdivided to 8ths',
+    'Subdivided to 16ths',
+    'Subdivided to 32nds',
+  ],
   labelTempo:      'TEMPO',
   labelBpm:        'bpm',
   labelBt:         'BT',
@@ -43,8 +50,55 @@ const en = {
   loopRange:       (s, e) => `↺ m.${s}–${e}`,
   startAt:         (m)    => `start m.${m}`,
 
+  // ── Timeline ─────────────────────────────────────────────────────────────────
+  timelineHintDesktop: 'TIMELINE · click = set start · drag = loop · shift-click = set loop end',
+  timelineHintMobile:  'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll',
+
   // ── Score panel ─────────────────────────────────────────────────────────────
   // (ScorePanel.jsx strings — add here when that file is i18n'd)
+
+  // ── Example scores ───────────────────────────────────────────────────────────
+  defaultScore: `1| 4/4 1/4=90
+5| 3/4
+9| 7/8 (223)
+12|  # Repeat indefinitely
+# Click "?" for more examples`,
+
+  exampleRit: `1| 4/4 1/4=160
+3| rit 1/4=60
+7| 1/4=60 accel 1/4=160
+8| 3/4
+9| 7/8 (2+2+3)  # subdivided
+10| 7/8 (322)   # abbr. form
+11| 9/8
+15| 3/4 1/4=160`,
+
+  exampleTuplet: `1: 4/4 1/4=90
+3: (1+1+2[3:111])          # triplets of 1/4ths
+5: (1+1+[3:111]+[3:111])   # triplets of 1/8ths
+7: (1+1+2[5:11111])        # quintuplets
+9: ([3:21])                       # swing beat (tiled ×4)
+11: ([4:31])                         # dotted 1/8th + 16th (tiled ×4)
+13: ([8:71])                         # d-dotted 1/8th + 32nd (tiled ×4)
+# patterns with rests
+15: (1+1+[3:.11]+[3:.11])           # triplets with rest on first beat
+17: (1+1+[4:..11]+[4:..11])         # 1/8th rest + 2 1/16ths
+19: (1+1+[3:1.1]+[3:1.1])           # triplets with rest on middle beat
+21: ([3:.11]+[4:.111]+[5:.1111]+[6:.11111])
+# A particularly troublesome pattern
+23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
+25:`,
+
+  exampleStructure: `1|: 4/4 1/4=90       # |: opens a repeat section
+8:| [A]               # :| closes it; rehearsal mark A
+9|: $ 7/8 (223)       # $ = segno; new repeat, odd meter
+16:|| [B]              # :|| closes repeat + double barline
+17|: 4/4               # open new repeat section
+24:| @                 # close repeat; @ = coda jump point
+25| [C] 1/4=120        # new section, faster
+32| DS al Coda         # go back to $; on return jump to @
+33| Coda               # coda section starts here
+36||                   # end of score`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   // These are parameterised; keep the function signatures intact.
@@ -129,12 +183,13 @@ const en = {
       'Tempo is interpolated smoothly on every beat.',
     ], exampleKey: 'rit' },
     { h: 'Tuplets & Rhythmic Patterns', body: [
-      'A tuplet group fits N notes into a span of denom-units:',
+      'A tuplet spans N beats and divides that span into div equal parts,',
+      'which are then combined into notes and rests:',
       '  N[div:slots]',
-      '  N = denom-units spanned (default 1 if omitted)',
-      '  div = number of equal parts to divide that span into',
-      '  slots = note durations in parts (digits, compact or + separated)',
-      '  .  in slots = rest (silent, no click)',
+      '  N     = beats spanned (default 1 if omitted)',
+      '  div   = number of equal parts the span is divided into',
+      '  slots = how parts are combined: digits and dots sum to div,',
+      '          digit = note (duration in parts), . = rest (one part)',
       '',
       'Examples:',
       '  [3:21]        triplet: long + short (swing feel)',
@@ -146,7 +201,7 @@ const en = {
       'Single-element shortcut: a grouping with just one element tiles',
       'to fill the measure if it divides evenly.',
       '  4/4 ([3:21])  → four swing beats  ([3:21]+[3:21]+[3:21]+[3:21])',
-      '  6/8 (3)       → two dotted-quarter beats  (same as default)',
+      '  6/8 (2)       → three groups of two eighth notes  (hemiola feel)',
     ], exampleKey: 'tuplet' },
     { h: 'Playback Controls', body: [
       '▶ / ◼  Play and stop.',
@@ -176,12 +231,6 @@ const en = {
       'Shift+→      Start a loop from cursor, or extend loop end.',
       'Shift+←      Shrink loop end (or start a loop ending before cursor).',
       'Ignored while typing in the score editor.',
-    ]},
-    { h: 'Measure Grid', body: [
-      'Click any cell to set start position.',
-      'Active measure highlighted in gold. Loop region in orange.',
-      'Tiles show time signature, grouping, and structural markers ($, @).',
-      'On mobile, swipe vertically to scroll.',
     ]},
   ],
 };

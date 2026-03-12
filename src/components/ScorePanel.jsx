@@ -4,7 +4,7 @@ export default function ScorePanel({
   C, mobile, scoreText, setScoreText,
   parseError, parseWarnings,
   onParse, onClearPasteParse, onClose,
-  scoreWidth,
+  scoreWidth, t,
 }) {
   return (
     <div style={{
@@ -20,13 +20,13 @@ export default function ScorePanel({
       padding: 14, gap: 10,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 9, letterSpacing: 3, color: C.textFaint }}>SCORE</div>
+        <div style={{ fontSize: 9, letterSpacing: 3, color: C.textFaint }}>{t.btnScore}</div>
         {mobile && (
           <button onClick={onClose} style={{
             background: 'transparent', border: `1px solid ${C.border}`,
             color: C.textDim, padding: '4px 10px', cursor: 'pointer',
             borderRadius: 3, fontSize: 12,
-          }}>✕ CLOSE</button>
+          }}>{t.helpClose} {t.btnScore}</button>
         )}
       </div>
 
