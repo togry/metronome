@@ -118,7 +118,6 @@ export default function Metronome() {
   const timelineRef        = useRef(null);
   const timelineScrollRef  = useRef(null);
   const dragStateRef       = useRef(null);
-  const lastTapRef         = useRef({ mn: null, time: 0 });
   const skipPlayEffectRef  = useRef(false);
   const playBtnRef         = useRef(null);
   const countInEnabledRef  = useRef(countInEnabled); countInEnabledRef.current = countInEnabled;
@@ -518,10 +517,6 @@ export default function Metronome() {
     if (!scrollEl) return 1;
     const containerRect = scrollEl.getBoundingClientRect();
     const relX = x - containerRect.left;
-
-    // Find which line row contains the click using viewport coordinates.
-    // getBoundingClientRect() is viewport-relative, same as clientY — no
-    // offset parent or scroll adjustment needed.
     const LABEL_H = 14;
     const inner   = scrollEl.firstElementChild;
     let lineIdx   = 0;
@@ -533,15 +528,12 @@ export default function Metronome() {
         if (i === children.length - 1) lineIdx = i;
       }
     }
-
-    // Replicate Timeline's slot width calculation
     const containerWidth = scrollEl.clientWidth;
     const MIN_PX         = mobile ? 22 : 26;
     const naturalPx      = containerWidth / Math.max(1, totalMeasures);
     const slotPx         = Math.max(MIN_PX, naturalPx);
     const measPerLine    = Math.max(1, Math.floor(containerWidth / slotPx));
     const filledSlotPx   = containerWidth / measPerLine;
-
     const lineStart = lineIdx * measPerLine + 1;
     return Math.max(1, Math.min(totalMeasures, lineStart + Math.floor(relX / filledSlotPx)));
   }
@@ -578,45 +570,67 @@ export default function Metronome() {
 
   function handleTimelineMouseUp() { dragStateRef.current = null; }
 
+  // Touch interaction model:
+  //   tap (no drag)       → set start position
+  //   tap+hold+drag       → loop selection (finger still for TAP_HOLD_MS then drag)
+  //   immediate drag      → scroll (browser pan-y handles it naturally)
+  const TAP_HOLD_MS = 150;
+
   function handleTimelineTouchStart(e) {
     if (e.touches.length >= 2) { dragStateRef.current = null; return; }
     const touch = e.touches[0];
     const mn    = measureFromXY(touch.clientX, touch.clientY);
-    const now   = Date.now();
-    const last  = lastTapRef.current;
-    if (last.mn !== null && now - last.time < 350) {
-      lastTapRef.current   = { mn: null, time: 0 };
-      dragStateRef.current = { anchorMn: mn, startX: touch.clientX, loopMode: true, confirmed: false };
-      setLoopStart(mn); setLoopEnd(mn);
-    } else {
-      lastTapRef.current   = { mn, time: now };
-      dragStateRef.current = { anchorMn: mn, startX: touch.clientX, startY: touch.clientY, loopMode: false, confirmed: false };
-    }
+
+    if (dragStateRef.current?.holdTimer) clearTimeout(dragStateRef.current.holdTimer);
+
+    dragStateRef.current = {
+      anchorMn: mn,
+      startX:   touch.clientX,
+      startY:   touch.clientY,
+      mode:     'pending',
+      holdTimer: setTimeout(() => {
+        if (dragStateRef.current?.mode === 'pending') {
+          dragStateRef.current.mode = 'loop';
+          setLoopStart(mn); setLoopEnd(mn);
+          setStartMeasure(mn); setPreviewMeasure(mn);
+        }
+      }, TAP_HOLD_MS),
+    };
   }
 
   function handleTimelineTouchMove(e) {
     if (e.touches.length >= 2) { dragStateRef.current = null; return; }
     if (!dragStateRef.current) return;
     const touch = e.touches[0];
-    const { anchorMn, startX, startY, loopMode } = dragStateRef.current;
-    if (loopMode) {
+    const { anchorMn, startX, startY, mode } = dragStateRef.current;
+    const dx = Math.abs(touch.clientX - startX);
+    const dy = Math.abs(touch.clientY - (startY ?? touch.clientY));
+
+    if (mode === 'pending') {
+      if (dx > 6 || dy > 6) {
+        clearTimeout(dragStateRef.current.holdTimer);
+        dragStateRef.current = { mode: 'scroll' };
+      }
+      return;
+    }
+
+    if (mode === 'scroll') return;
+
+    if (mode === 'loop') {
       e.preventDefault();
       const mn = measureFromXY(touch.clientX, touch.clientY);
       const lo = Math.min(anchorMn, mn), hi = Math.max(anchorMn, mn);
       setLoopStart(lo); setLoopEnd(hi);
       setStartMeasure(lo); setPreviewMeasure(lo);
-      dragStateRef.current.confirmed = true;
-      return;
     }
-    const dx = Math.abs(touch.clientX - startX);
-    const dy = Math.abs(touch.clientY - (startY ?? touch.clientY));
-    if (dx > 8 || dy > 8) dragStateRef.current = null;
   }
 
   function handleTimelineTouchEnd() {
     if (!dragStateRef.current) return;
-    const { anchorMn, loopMode, confirmed } = dragStateRef.current;
-    if (!loopMode && !confirmed) {
+    const { anchorMn, mode, holdTimer } = dragStateRef.current;
+    clearTimeout(holdTimer);
+
+    if (mode === 'pending') {
       setStartMeasure(anchorMn); setPreviewMeasure(anchorMn);
       setLoopStart(null);        setLoopEnd(null);
       if (isPlayingRef.current) {
@@ -1208,6 +1222,7 @@ export default function Metronome() {
             </div>
           </div>
 
+
           {/* Timeline — flex:1, wraps across lines, auto-scrolls to playhead */}
           <Timeline
             C={C} mobile={mobile} t={t}
@@ -1222,6 +1237,7 @@ export default function Metronome() {
             onTouchMove={handleTimelineTouchMove}
             onTouchEnd={handleTimelineTouchEnd}
           />
+
 
         </div>
       </div>
