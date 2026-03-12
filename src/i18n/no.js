@@ -53,7 +53,8 @@ const no = {
 
   // ── Timeline ─────────────────────────────────────────────────────────────────
   timelineHintDesktop: 'TIDSLINJE · klikk = sett start · dra = sløyfe · shift-klikk = sett sløyfeslutt',
-  timelineHintMobile:  'TIDSLINJE · trykk=start · dbl-dra=sløyfe · dra med 2-fingre=forskyve',
+  timelineHintMobile:  'TIDSLINJE · trykk = sett start · hold+dra = sløyfe · dra = forskyv',
+
 
   // ── Eksempelnoter ───────────────────────────────────────────────────────
   defaultScore: `1| 4/4 1/4=90
@@ -211,10 +212,9 @@ const no = {
     ]},
     { h: 'Tidslinje', body: [
       'Viser hele stykket med merker, taktarter og taktlinjer.',
-      'Skrivebord: klikk → sett start · dra → sløyfe · shift-klikk → sett slutt.',
-      'Trykkskjerm: trykk → sett start · dobbelttrykk og trekk → sett sløyfe.',
-      'Trykkskjerm: 2-finger dra → forskyv tidslinje horisontalt.',
-      'Avspillingsmerke angir posisjon; klikk/trykk under avspilling for å hoppe.',
+      'Peker: klikk → sett start · dra → sløyfe · shift-klikk → sett sløyfeslutt.',
+      'Trykkskjerm: trykk → sett start · hold og dra → sløyfe · dra → forskyv.',
+      'Trykk eller klikk under avspilling for å hoppe til takt.',
     ]},
     { h: 'Sløyfe', body: [
       'Definer et avsnitt avspilles gjentatte ganger (oransje markering).',

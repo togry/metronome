@@ -52,7 +52,7 @@ const en = {
 
   // ── Timeline ─────────────────────────────────────────────────────────────────
   timelineHintDesktop: 'TIMELINE · click = set start · drag = loop · shift-click = set loop end',
-  timelineHintMobile:  'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll',
+  timelineHintMobile:  'TIMELINE · tap = set start · hold+drag = loop · drag = scroll',
 
   // ── Score panel ─────────────────────────────────────────────────────────────
   // (ScorePanel.jsx strings — add here when that file is i18n'd)
@@ -214,10 +214,9 @@ const en = {
     ]},
     { h: 'Timeline', body: [
       'Shows the full piece with rehearsal marks, time signatures, and barlines.',
-      'Desktop: click → set start · drag → loop region · shift-click → loop end.',
-      'Touch: tap → set start · double-tap then drag → loop region.',
-      'Touch: 2-finger drag → scroll timeline horizontally.',
-      'Playhead tracks position; click/tap while playing to jump immediately.',
+      'Pointer: click → set start · drag → loop region · shift-click → loop end.',
+      'Touch: tap → set start · hold then drag → loop region · drag → scroll.',
+      'Tap or click while playing to jump immediately.',
     ]},
     { h: 'Loop Region', body: [
       'Define a region to repeat during playback (orange highlight).',
