@@ -68,6 +68,17 @@ export default function Timeline({
     }
   }, [currentMeasure, playing]);
 
+  // Register touchmove as non-passive so preventDefault() works on iOS.
+  // React registers onTouchMove as passive by default, which silently ignores
+  // preventDefault() — meaning iOS will scroll even when we want loop drag.
+  useEffect(() => {
+    const el = timelineRef.current;
+    if (!el) return;
+    const handler = (e) => onTouchMove(e);
+    el.addEventListener('touchmove', handler, { passive: false });
+    return () => el.removeEventListener('touchmove', handler);
+  }, [onTouchMove]);
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{
@@ -100,7 +111,6 @@ export default function Timeline({
           ref={timelineRef}
           onMouseDown={onMouseDown}
           onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
           style={{
             display: 'flex',
