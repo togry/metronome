@@ -108,6 +108,9 @@ export default function Timeline({
             gap: ROW_GAP + LABEL_H,
             paddingBottom: 8,
             cursor: 'crosshair',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
           }}
         >
           {lines.map((line, li) => {
