@@ -12,7 +12,6 @@ import { useLocale, LOCALES } from './i18n/useLocale.js';
 import ScorePanel  from './components/ScorePanel.jsx';
 import HelpModal   from './components/HelpModal.jsx';
 import Timeline    from './components/Timeline.jsx';
-import MeasureGrid from './components/MeasureGrid.jsx';
 
 export default function Metronome() {
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -514,22 +513,43 @@ export default function Metronome() {
   const totalMeasures = endAt ?? Object.values(measures).filter(Boolean).length;
   totalMeasuresRef.current = totalMeasures;
 
-  const MIN_PX_PER_MEASURE    = 22;
-  const timelineContentWidth  = Math.max(totalMeasures * MIN_PX_PER_MEASURE, 200);
-  const pxPerSlot             = timelineContentWidth / Math.max(1, totalMeasures);
-  const measPx                = (mn) => Math.round((mn - 1) * pxPerSlot);
-
-  function measureFromX(x) {
+  function measureFromXY(x, y) {
     const scrollEl = timelineScrollRef.current;
-    const rect = scrollEl.getBoundingClientRect();
-    const px   = (x - rect.left) + scrollEl.scrollLeft;
-    return Math.max(1, Math.min(totalMeasures, Math.floor(px / pxPerSlot) + 1));
+    if (!scrollEl) return 1;
+    const containerRect = scrollEl.getBoundingClientRect();
+    const relX = x - containerRect.left;
+
+    // Find which line row contains the click using viewport coordinates.
+    // getBoundingClientRect() is viewport-relative, same as clientY — no
+    // offset parent or scroll adjustment needed.
+    const LABEL_H = 14;
+    const inner   = scrollEl.firstElementChild;
+    let lineIdx   = 0;
+    if (inner) {
+      const children = Array.from(inner.children);
+      for (let i = 0; i < children.length; i++) {
+        const rect = children[i].getBoundingClientRect();
+        if (y >= rect.top && y < rect.bottom + LABEL_H) { lineIdx = i; break; }
+        if (i === children.length - 1) lineIdx = i;
+      }
+    }
+
+    // Replicate Timeline's slot width calculation
+    const containerWidth = scrollEl.clientWidth;
+    const MIN_PX         = mobile ? 22 : 26;
+    const naturalPx      = containerWidth / Math.max(1, totalMeasures);
+    const slotPx         = Math.max(MIN_PX, naturalPx);
+    const measPerLine    = Math.max(1, Math.floor(containerWidth / slotPx));
+    const filledSlotPx   = containerWidth / measPerLine;
+
+    const lineStart = lineIdx * measPerLine + 1;
+    return Math.max(1, Math.min(totalMeasures, lineStart + Math.floor(relX / filledSlotPx)));
   }
 
   // ── Timeline event handlers ────────────────────────────────────────────────
   function handleTimelineMouseDown(e) {
     e.preventDefault();
-    const mn = measureFromX(e.clientX);
+    const mn = measureFromXY(e.clientX, e.clientY);
     if (e.shiftKey) {
       if (mn > startMeasure) setLoopEnd(mn);
     } else {
@@ -548,7 +568,7 @@ export default function Metronome() {
   function handleTimelineMouseMove(e) {
     if (!dragStateRef.current) return;
     const { anchorMn } = dragStateRef.current;
-    const mn = measureFromX(e.clientX);
+    const mn = measureFromXY(e.clientX, e.clientY);
     if (mn !== anchorMn) {
       const lo = Math.min(anchorMn, mn), hi = Math.max(anchorMn, mn);
       setStartMeasure(lo); setPreviewMeasure(lo);
@@ -561,7 +581,7 @@ export default function Metronome() {
   function handleTimelineTouchStart(e) {
     if (e.touches.length >= 2) { dragStateRef.current = null; return; }
     const touch = e.touches[0];
-    const mn    = measureFromX(touch.clientX);
+    const mn    = measureFromXY(touch.clientX, touch.clientY);
     const now   = Date.now();
     const last  = lastTapRef.current;
     if (last.mn !== null && now - last.time < 350) {
@@ -581,7 +601,7 @@ export default function Metronome() {
     const { anchorMn, startX, startY, loopMode } = dragStateRef.current;
     if (loopMode) {
       e.preventDefault();
-      const mn = measureFromX(touch.clientX);
+      const mn = measureFromXY(touch.clientX, touch.clientY);
       const lo = Math.min(anchorMn, mn), hi = Math.max(anchorMn, mn);
       setLoopStart(lo); setLoopEnd(hi);
       setStartMeasure(lo); setPreviewMeasure(lo);
@@ -617,19 +637,6 @@ export default function Metronome() {
       window.removeEventListener('mouseup',  handleTimelineMouseUp);
     };
   }, [playing, startMeasure]);
-
-  // Auto-scroll timeline
-  useEffect(() => {
-    const scrollEl = timelineScrollRef.current;
-    if (!scrollEl) return;
-    const targetMn = playing ? currentMeasure : startMeasure;
-    const px       = measPx(targetMn);
-    const vw       = scrollEl.clientWidth;
-    const sl       = scrollEl.scrollLeft;
-    const margin   = Math.max(40, vw * 0.2);
-    if      (px < sl + margin)          scrollEl.scrollLeft = Math.max(0, px - margin);
-    else if (px > sl + vw - margin)     scrollEl.scrollLeft = px - vw + margin;
-  }, [currentMeasure, startMeasure, playing]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -1153,24 +1160,6 @@ export default function Metronome() {
             </div>
           </div>
 
-          {/* Timeline */}
-          <Timeline
-            C={C} mobile={mobile} t={t}
-            totalMeasures={totalMeasures}
-            timelineContentWidth={timelineContentWidth}
-            pxPerSlot={pxPerSlot}
-            measPx={measPx}
-            timelineEvents={timelineEvents}
-            loopStart={loopStart} loopEnd={loopEnd}
-            startMeasure={startMeasure} currentMeasure={currentMeasure}
-            playing={playing}
-            timelineRef={timelineRef} timelineScrollRef={timelineScrollRef}
-            onMouseDown={handleTimelineMouseDown}
-            onTouchStart={handleTimelineTouchStart}
-            onTouchMove={handleTimelineTouchMove}
-            onTouchEnd={handleTimelineTouchEnd}
-          />
-
           {/* Start / loop inputs */}
           <div style={{
             padding: mobile ? '6px 12px' : '8px 20px',
@@ -1219,19 +1208,19 @@ export default function Metronome() {
             </div>
           </div>
 
-          {/* Measure grid */}
-          <MeasureGrid
-            C={C} mobile={mobile} portrait={portrait} t={t}
-            measures={measures}
-            playing={playing}
-            currentMeasure={currentMeasure}
-            previewMeasure={previewMeasure}
-            startMeasure={startMeasure}
+          {/* Timeline — flex:1, wraps across lines, auto-scrolls to playhead */}
+          <Timeline
+            C={C} mobile={mobile} t={t}
+            totalMeasures={totalMeasures}
+            timelineEvents={timelineEvents}
             loopStart={loopStart} loopEnd={loopEnd}
-            onMeasureClick={mn => {
-              setStartMeasure(mn); setLoopStart(null); setLoopEnd(null);
-              if (!playing) setPreviewMeasure(mn);
-            }}
+            startMeasure={startMeasure} currentMeasure={currentMeasure}
+            playing={playing}
+            timelineRef={timelineRef} timelineScrollRef={timelineScrollRef}
+            onMouseDown={handleTimelineMouseDown}
+            onTouchStart={handleTimelineTouchStart}
+            onTouchMove={handleTimelineTouchMove}
+            onTouchEnd={handleTimelineTouchEnd}
           />
 
         </div>

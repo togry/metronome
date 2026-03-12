@@ -54,9 +54,6 @@ const en = {
   timelineHintDesktop: 'TIMELINE · click = set start · drag = loop · shift-click = set loop end',
   timelineHintMobile:  'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll',
 
-  // ── Measure grid ─────────────────────────────────────────────────────────────
-  labelMeasures:   'MEASURES',
-
   // ── Score panel ─────────────────────────────────────────────────────────────
   // (ScorePanel.jsx strings — add here when that file is i18n'd)
 
@@ -71,7 +68,8 @@ const en = {
 3| rit 1/4=60
 7| 1/4=60 accel 1/4=160
 8| 3/4
-9| 7/8 (2+2+3)
+9| 7/8 (2+2+3)  # subdivided
+10| 7/8 (322)   # abbr. form
 11| 9/8
 15| 3/4 1/4=160`,
 
@@ -233,12 +231,6 @@ const en = {
       'Shift+→      Start a loop from cursor, or extend loop end.',
       'Shift+←      Shrink loop end (or start a loop ending before cursor).',
       'Ignored while typing in the score editor.',
-    ]},
-    { h: 'Measure Grid', body: [
-      'Click any cell to set start position.',
-      'Active measure highlighted in gold. Loop region in orange.',
-      'Tiles show time signature, grouping, and structural markers ($, @).',
-      'On mobile, swipe vertically to scroll.',
     ]},
   ],
 };

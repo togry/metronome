@@ -30,7 +30,7 @@ const no = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'UNDERDELING',
   subdivOptions: [
-    'Bare grunnslag',
+    'Bare pulsslag',
     '4-deler',
     '8-deler',
     '16-deler',
@@ -55,9 +55,6 @@ const no = {
   timelineHintDesktop: 'TIDSLINJE · klikk = sett start · dra = sløyfe · shift-klikk = sett sløyfeslutt',
   timelineHintMobile:  'TIDSLINJE · trykk=start · dbl-dra=sløyfe · dra med 2-fingre=forskyve',
 
-  // ── Taktrutenett ─────────────────────────────────────────────────────────────
-  labelMeasures:   'TAKTER',
-
   // ── Eksempelnoter ───────────────────────────────────────────────────────
   defaultScore: `1| 4/4 1/4=90
 5| 3/4
@@ -69,7 +66,8 @@ const no = {
 3| rit 1/4=60
 7| 1/4=60 accel 1/4=160
 8| 3/4
-9| 7/8 (2+2+3)
+9| 7/8 (2+2+3)  # underdeling
+10| 7/8 (322)   # kortform
 11| 9/8
 15| 3/4 1/4=160`,
 
@@ -130,7 +128,7 @@ const no = {
   helpSections: [
     { h: 'Taktarter', body: [
       'Standard: 4/4  3/4  6/8  2/2  12/8',
-      'Sammensatte takter (6/8, 12/8): grunnslag = punktert firedel automatisk.',
+      'Sammensatte takter (6/8, 12/8): pulsslag = punktert firedel automatisk.',
       'Odde taktarter: legg til gruppering, f.eks.  7/8 (2+2+3)  eller  5/8 (2+3)',
       'Grupperinger huskes per taktart gjennom hele stykket.',
     ]},
@@ -182,10 +180,10 @@ const no = {
       'Tempo interpoleres jevnt på hvert slag.',
     ], exampleKey: 'rit' },
     { h: 'Tupletter og rytmemønstre', body: [
-      'En tuplettgruppe strekker seg over N taktenheter og deler spennet',
+      'En tuplettgruppe strekker seg over N pulsslag og deler spennet',
       'i div like deler, som kombineres til noter og pauser:',
       '  N[div:slots]',
-      '  N      = taktenheter som tupletten strekker seg over (standard: 1)',
+      '  N      = pulsslag som tupletten strekker seg over (standard: 1)',
       '  div    = antall like deler spennet deles i',
       '  slots  = hvordan delene kombineres: siffer og punktum summerer til div,',
       '           siffer = note (varighet i deler), . = pause (én del)',
@@ -206,7 +204,7 @@ const no = {
       '▶ / ◼  Spill og stopp.',
       'OPPSLAG  Legger til oppslag før avspilling; velg antall slag og noteverdi.',
       '  VED REPETISJON: legg også til oppslag ved hver løkke- eller stykkerepetisjon.',
-      'UNDERDELING  Bare grunnslag, eller underdelt til 4-deler / 8-deler / 16-deler / 32-deler.',
+      'UNDERDELING  Bare pulsslag, eller underdelt til 4-deler / 8-deler / 16-deler / 32-deler.',
       '  Underklikk legges bare til der et slag kan deles likt.',
       'TEMPO velg fra 10% til 150 % av angitt tempo.',
       '☀ / 🌙  Veksle mellom mørkt og lyst tema.',
@@ -230,12 +228,6 @@ const no = {
       'Shift+→      Start sløyfe fra markør, eller utvid sløyfe.',
       'Shift+←      Minsk sløyfe (eller start sløyfe som slutter før markør).',
       'Ignoreres mens du skriver i notefeltet.',
-    ]},
-    { h: 'Taktrutenett', body: [
-      'Klikk på en celle for å sette startposisjon.',
-      'Aktuell takt uthevet i gull. Sløyfe i oransje.',
-      'Ruter viser taktart, gruppering og strukturmarkører ($, @).',
-      'På mobil, sveip vertikalt for å dra.',
     ]},
   ],
 };
