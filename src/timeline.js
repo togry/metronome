@@ -15,7 +15,10 @@ export function getTimelineEvents(measures, endAt) {
     const openRepeat  = ms.barline === '|:'  || ms.barline === '||:' || ms.barline === '|:|';
     const closeRepeat = ms.barline === ':|'  || ms.barline === ':||' || ms.barline === '|:|';
 
-    // Left-edge: sig change, rehearsal, open-repeat, directives, segno, codaJump
+    // Left-edge: sig change, rehearsal, open-repeat, directives, segno, codaJump.
+    // For the final measure (isEnd), treat the || as a plain barline so it doesn't
+    // render as a new-section double-barline — the isFine right-edge event handles that.
+    const leftBarline = ms.isEnd ? ':' : ms.barline;
     if (ms.rehearsal || sig !== prevSig || mn === 1 || openRepeat ||
         ms.directive || ms.segno || ms.codaJump) {
       events.push({
@@ -24,7 +27,7 @@ export function getTimelineEvents(measures, endAt) {
         numerator: ms.numerator, denominator: ms.denominator,
         grouping: ms.grouping, tempoBPM: ms.tempoBPM,
         isFine: false,
-        directive: ms.directive, barline: ms.barline,
+        directive: ms.directive, barline: leftBarline,
         segno: ms.segno, codaJump: ms.codaJump,
         openRepeat, closeRepeat: false,
       });

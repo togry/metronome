@@ -88,16 +88,17 @@ const no = {
 23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
 25:`,
 
-  exampleStructure: `1|: 4/4 1/4=90       # |: begynn en repetisjon
-8:| [A]               # :| avslutt; prøvemerke A
-9|: $ 7/8 (223)       # $ = segno; ny repetisjon, odde taktart
-16:|| [B]              # :|| lukker repetisjon + dobbel taktlinje
-17|: 4/4               # begynn ny repetisjon
-24:| @                 # avslutt repetisjon; @ = coda-hoppunkt
-25| [C] 1/4=120        # ny seksjon, raskere
-32| DS al Coda         # tilbake til $; ved @ hopp til Coda
-33| Coda               # coda-seksjonen starter her
-36||                   # slutt på note`,
+  exampleStructure: `1|: 4/4 1/4=90        # |: begynn en repetisjon
+8:|                   # :| avslutt
+9|: [A] $ 7/8 (223)   # $ = segno; ny repetisjon, ny taktart; prøvemerke A
+16:|                  # slutt repetisjon
+17||: [B] 4/4         # begynn ny repetisjon, dobbel taktstrek; prøvemerke B
+24:|                  # slutt repetisjon
+25| [C] 1/4=120       # prøvemerke C, nytt tempo
+28| @                 # coda-hoppunkt
+32| DS al Coda        # tilbake til $; ved @ hopp til Coda
+33| Coda              # coda begynner her
+36||                  # slutt på stykke`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   warnGroupingNotDivisible: (mn, units, num, den) =>

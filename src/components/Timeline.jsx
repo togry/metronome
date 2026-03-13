@@ -218,24 +218,22 @@ export default function Timeline({
                       ? groupingShortLabel(ev.grouping)
                       : null;
 
-                    const row4Label =
-                      ev.isFine        ? '‖'
-                      : ev.directive   ? ev.directive
-                          .replace('DC_FINE','D.C.aF').replace('DC_CODA','D.C.aC')
-                          .replace('DS_FINE','D.S.aF').replace('DS_CODA','D.S.aC')
-                          .replace('FINE','Fine').replace('CODA','Coda')
-                      : ev.segno       ? '$'
-                      : ev.codaJump    ? '@'
-                      : ev.closeRepeat ? ':]'
-                      : ev.openRepeat  ? '[:'
-                      : null;
+                    const row4Label = (() => {
+                      if (ev.isFine) return '‖';
+                      if (ev.directive) return ev.directive
+                        .replace('DC_FINE','D.C.aF').replace('DC_CODA','D.C.aC')
+                        .replace('DS_FINE','D.S.aF').replace('DS_CODA','D.S.aC')
+                        .replace('FINE','Fine').replace('CODA','Coda');
+                      const parts = [];
+                      if (ev.closeRepeat) parts.push(':]');
+                      if (ev.segno)       parts.push('$');
+                      if (ev.codaJump)    parts.push('@');
+                      if (ev.openRepeat)  parts.push('[:');
+                      return parts.length ? parts.join(' ') : null;
+                    })();
 
                     const row4Color =
-                      ev.isFine        ? C.measure
-                      : ev.directive   ? C.primary
-                      : (ev.segno || ev.codaJump) ? C.unit
-                      : (ev.openRepeat || ev.closeRepeat) ? C.primary
-                      : C.textFaint;
+                      ev.isFine ? C.measure : C.orange;
 
                     const anchor = ev.rightEdge
                       ? { right: vlineWidth + 2, textAlign: 'right' }
