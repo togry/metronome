@@ -31,6 +31,9 @@ jobs:
             echo "VITE_BASE_PATH=/metronome/preview/${SAFE_BRANCH}/" >> $GITHUB_ENV
           fi
 
+      - name: Install rsvg-convert
+        run: sudo apt-get install -y librsvg2-bin
+
       - run: npm run build
 
       - name: Deploy to GitHub Pages
