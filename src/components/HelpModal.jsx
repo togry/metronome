@@ -91,8 +91,16 @@ export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
         </div>
         <div style={{ fontSize: 10, color: C.textFaint, marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 8, lineHeight: 1.7 }}>
           {t.helpCredits.map((line, i) => <div key={i}>{line}</div>)}
+          <div style={{ marginTop: 6 }}>
+              <a href="https://github.com/togry/metronome"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: C.gold, textDecoration: 'none' }}
+            >github.com/togry/metronome</a>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
