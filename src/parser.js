@@ -216,6 +216,11 @@ export function parseScore(text, t) {
   const noExplicitEnd      = lastDoublebar === null;
   const endAt              = noExplicitEnd ? lastDefinedMeasure : lastDoublebar;
 
+  // The final || is the end-of-piece marker, not a section boundary.
+  // Clear any auto-rehearsal that was set solely because of the || rule.
+  if (!noExplicitEnd && changes[endAt] && changes[endAt].rehearsal === String(endAt))
+    delete changes[endAt].rehearsal;
+
   const warnings = [];
 
   // ── Forward pass: build measures[] ──────────────────────────────────────────

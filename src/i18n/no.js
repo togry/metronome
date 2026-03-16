@@ -53,7 +53,8 @@ const no = {
 
   // ── Timeline ─────────────────────────────────────────────────────────────────
   timelineHintDesktop: 'TIDSLINJE · klikk = sett start · dra = sløyfe · shift-klikk = sett sløyfeslutt',
-  timelineHintMobile:  'TIDSLINJE · trykk=start · dbl-dra=sløyfe · dra med 2-fingre=forskyve',
+  timelineHintMobile:  'TIDSLINJE · trykk = sett start · hold+dra = sløyfe · dra = forskyv',
+
 
   // ── Eksempelnoter ───────────────────────────────────────────────────────
   defaultScore: `1| 4/4 1/4=90
@@ -87,16 +88,17 @@ const no = {
 23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
 25:`,
 
-  exampleStructure: `1|: 4/4 1/4=90       # |: begynn en repetisjon
-8:| [A]               # :| avslutt; prøvemerke A
-9|: $ 7/8 (223)       # $ = segno; ny repetisjon, odde taktart
-16:|| [B]              # :|| lukker repetisjon + dobbel taktlinje
-17|: 4/4               # begynn ny repetisjon
-24:| @                 # avslutt repetisjon; @ = coda-hoppunkt
-25| [C] 1/4=120        # ny seksjon, raskere
-32| DS al Coda         # tilbake til $; ved @ hopp til Coda
-33| Coda               # coda-seksjonen starter her
-36||                   # slutt på note`,
+  exampleStructure: `1|: 4/4 1/4=90        # |: begynn en repetisjon
+8:|                   # :| avslutt
+9|: [A] $ 7/8 (223)   # $ = segno; ny repetisjon, ny taktart; prøvemerke A
+16:|                  # slutt repetisjon
+17||: [B] 4/4         # begynn ny repetisjon, dobbel taktstrek; prøvemerke B
+24:|                  # slutt repetisjon
+25| [C] 1/4=120       # prøvemerke C, nytt tempo
+28| @                 # coda-hoppunkt
+32| DS al Coda        # tilbake til $; ved @ hopp til Coda
+33| Coda              # coda begynner her
+36||                  # slutt på stykke`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   warnGroupingNotDivisible: (mn, units, num, den) =>
@@ -211,10 +213,9 @@ const no = {
     ]},
     { h: 'Tidslinje', body: [
       'Viser hele stykket med merker, taktarter og taktlinjer.',
-      'Skrivebord: klikk → sett start · dra → sløyfe · shift-klikk → sett slutt.',
-      'Trykkskjerm: trykk → sett start · dobbelttrykk og trekk → sett sløyfe.',
-      'Trykkskjerm: 2-finger dra → forskyv tidslinje horisontalt.',
-      'Avspillingsmerke angir posisjon; klikk/trykk under avspilling for å hoppe.',
+      'Peker: klikk → sett start · dra → sløyfe · shift-klikk → sett sløyfeslutt.',
+      'Trykkskjerm: trykk → sett start · hold og dra → sløyfe · dra → forskyv.',
+      'Trykk eller klikk under avspilling for å hoppe til takt.',
     ]},
     { h: 'Sløyfe', body: [
       'Definer et avsnitt avspilles gjentatte ganger (oransje markering).',

@@ -1,12 +1,10 @@
 // ─── Help modal ───────────────────────────────────────────────────────────────
 
-import { RIT_EXAMPLE_SCORE, TUPLET_EXAMPLE_SCORE, STRUCTURE_EXAMPLE_SCORE } from '../constants.js';
-
-const EXAMPLE_MAP = {
-  practice:  '1| 4/4, 1/4=120\n2| 7/8 (2+2+3)\n3| 4/4\n4| 5/4',
-  structure: STRUCTURE_EXAMPLE_SCORE,
-  rit:       RIT_EXAMPLE_SCORE,
-  tuplet:    TUPLET_EXAMPLE_SCORE,
+const EXAMPLE_KEYS = {
+  practice:  'defaultScore',
+  structure: 'exampleStructure',
+  rit:       'exampleRit',
+  tuplet:    'exampleTuplet',
 };
 
 export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
@@ -42,7 +40,7 @@ export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
         </div>
 
         {t.helpSections.map(({ h, body, exampleKey }) => {
-          const example = exampleKey ? EXAMPLE_MAP[exampleKey] : null;
+          const example = exampleKey ? t[EXAMPLE_KEYS[exampleKey]] ?? null : null;
           return (
             <div key={h} style={{ marginBottom: 16 }}>
               <div style={{

@@ -52,7 +52,7 @@ const en = {
 
   // ── Timeline ─────────────────────────────────────────────────────────────────
   timelineHintDesktop: 'TIMELINE · click = set start · drag = loop · shift-click = set loop end',
-  timelineHintMobile:  'TIMELINE · tap=start · dbl-drag=loop · 2-finger=scroll',
+  timelineHintMobile:  'TIMELINE · tap = set start · hold+drag = loop · drag = scroll',
 
   // ── Score panel ─────────────────────────────────────────────────────────────
   // (ScorePanel.jsx strings — add here when that file is i18n'd)
@@ -89,16 +89,17 @@ const en = {
 23: 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2)
 25:`,
 
-  exampleStructure: `1|: 4/4 1/4=90       # |: opens a repeat section
-8:| [A]               # :| closes it; rehearsal mark A
-9|: $ 7/8 (223)       # $ = segno; new repeat, odd meter
-16:|| [B]              # :|| closes repeat + double barline
-17|: 4/4               # open new repeat section
-24:| @                 # close repeat; @ = coda jump point
-25| [C] 1/4=120        # new section, faster
-32| DS al Coda         # go back to $; on return jump to @
-33| Coda               # coda section starts here
-36||                   # end of score`,
+  exampleStructure: `1|: 4/4 1/4=90        # |: opens a repeat section
+8:|                   # :| closes it
+9|: [A] $ 7/8 (223)   # $ = segno; new repeat, new meter; rehearsal mark A
+16:|                  # close repeat
+17||: [B] 4/4         # new repeat, double barline; rehearsal mark B
+24:|                  # close repeat
+25| [C] 1/4=120       # rehearsal mark C, new tempo
+28| @                 # coda jump point
+32| DS al Coda        # go back to $; on return jump to @
+33| Coda              # coda section starts here
+36||                  # end of score`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   // These are parameterised; keep the function signatures intact.
@@ -214,10 +215,9 @@ const en = {
     ]},
     { h: 'Timeline', body: [
       'Shows the full piece with rehearsal marks, time signatures, and barlines.',
-      'Desktop: click → set start · drag → loop region · shift-click → loop end.',
-      'Touch: tap → set start · double-tap then drag → loop region.',
-      'Touch: 2-finger drag → scroll timeline horizontally.',
-      'Playhead tracks position; click/tap while playing to jump immediately.',
+      'Pointer: click → set start · drag → loop region · shift-click → loop end.',
+      'Touch: tap → set start · hold then drag → loop region · drag → scroll.',
+      'Tap or click while playing to jump immediately.',
     ]},
     { h: 'Loop Region', body: [
       'Define a region to repeat during playback (orange highlight).',
