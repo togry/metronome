@@ -251,6 +251,7 @@ plays on.
 
 | Warning | Fallback |
 |---------|----------|
+| A grouping is malformed — a tuplet's slots do not sum to its divisor | Grouping ignored |
 | A grouping element does not divide the measure evenly | Grouping ignored |
 | `rit`/`accel` needs a target tempo (short form used with `a tempo`) | Curve dropped |
 | `rit`/`accel` has no target and no following tempo mark | Curve dropped |
@@ -271,8 +272,12 @@ the ordinary way to write a piece that repeats from the top.
 - **COUNT IN** — checkbox to enable a count-in before playback; choose 2, 3,
   or 4 beats of quarters or eighths. Tick **ON REPEAT** to also insert a
   count-in each time a loop region or looping score wraps around.
-- **SUBDIVIDE** — primary beats only, or subdivided to 4ths / 8ths / 16ths /
-  32nds (sub-clicks added only where the beat divides evenly)
+- **SUBDIVIDE** — how much to click:
+  - *Once per measure* — a single downbeat per bar, for conducting long or
+    fast passages by the measure rather than the beat
+  - *Primary beats* — one click per beat group (the default)
+  - *Subdivided to 4ths / 8ths / 16ths / 32nds* — sub-clicks added only where
+    the beat divides evenly
 - **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider
 - **BT** — Bluetooth latency offset (0–500 ms); compensates for wireless
   headphone delay so clicks and visual flashes align with what you hear
@@ -301,9 +306,10 @@ Arrow keys and Space are ignored while typing in the score editor.
 
 Above the timeline, one dot per click in the current measure, sized and
 coloured by weight (downbeat / primary / subdivision). Rests are drawn as
-small hollow dots. The dot for the current click lights up in real time.
-The header line shows the measure number, any rehearsal mark, the grouping,
-and the resulting click count.
+small hollow dots. Each click flashes its dot for about 120 ms, or until the
+next click if that comes sooner — so fast subdivisions read as a moving light
+and slow beats as a distinct pulse. The header line shows the measure number,
+any rehearsal mark, the grouping, and the resulting click count.
 
 When stopped, the visualiser previews whatever measure the cursor is on, so
 you can step through the piece with the arrow keys and see each bar's pattern
@@ -317,10 +323,16 @@ multiple lines** and the strip scrolls vertically, auto-scrolling to keep the
 playing line in view.
 
 **Desktop:** click to set cursor · drag to define loop · shift-click to set
-loop end · playhead tracks position in real time.
+loop end.
 
 **Mobile:** tap to set cursor · double-tap then drag to define loop ·
 two-finger drag to scroll.
+
+The playhead glides continuously across each bar rather than stepping from
+barline to barline, so it shows where you are within the measure whatever the
+subdivision setting. On stop it stays where it stood, dimmed, as a marker of
+where playback left off — distinct from the cursor, which is where playback
+will next begin.
 
 ### Loops
 
@@ -388,6 +400,14 @@ a React re-render per beat. React state updates only when the measure
 changes. The **BT** control offsets audio earlier than visuals to compensate
 for Bluetooth output latency.
 
+Two things ride on that same loop. Each queued tick carries an *off* time as
+well as a fire time, so a flash ends on its own rather than waiting to be
+replaced by the next one — without which any pattern whose ticks all target
+the same dot, such as *once per measure*, would sit permanently lit. And each
+tick carries the start time and length of its bar, which lets the loop
+interpolate the playhead across the bar every frame, again with no React
+state involved.
+
 **Tempo curves are per tick.** `rit`/`accel` spans are resolved to a start
 BPM, target BPM, and a total length in denominator units; each tick
 interpolates its own duration from its offset into the span, so the tempo
@@ -419,9 +439,11 @@ the app — open it directly in a browser.
 npm test
 ```
 
-Runs the parser test suite (`test/*.test.js`) on Node's built-in test runner —
-no dependencies, no config. The suite covers the score language: barlines and
+Runs the test suite (`test/*.test.js`) on Node's built-in test runner —
+no dependencies, no config. It covers the score language: barlines and
 repeat expansion, D.C./D.S. al Fine/Coda, groupings and their inheritance,
-tuplet slots, tempo, rit/accel spans, and the warning cases. It tests
-`parser.js` and `beatModel.js`, which are pure; the React layer and the
+tuplet slots, tempo, rit/accel spans, and every warning case. It also checks
+the beat patterns each subdivision setting produces, and that every locale
+carries a label for every control option. What it exercises is `parser.js`,
+`beatModel.js`, and the option tables — all pure; the React layer and the
 scheduler are not covered.
