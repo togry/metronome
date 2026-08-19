@@ -94,6 +94,19 @@ function parseGrouping(str) {
   });
 }
 
+// Is this a usable grouping element?
+// parseGrouping yields NaN for anything it could not read — a tuplet whose
+// slots don't sum to its divisor, a stray token. Those must never reach the
+// beat model: a NaN beat duration stalls the scheduler and a zero-length one
+// spins it, in both cases silently.
+function isValidGroupElement(g) {
+  if (g !== null && typeof g === 'object')
+    return Number.isInteger(g.units) && g.units > 0
+        && Number.isInteger(g.div)   && g.div   > 0
+        && Array.isArray(g.slots)    && g.slots.length > 0;
+  return Number.isInteger(g) && g > 0;
+}
+
 // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
 const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
 
@@ -235,9 +248,12 @@ export function parseScore(text, t) {
       const newDen = c.denominator ?? state.denominator;
       let resolvedGrouping;
       if (c.grouping) {
-        // Single-element shortcut: tile to fill the measure if it divides evenly
         let g = c.grouping;
-        if (g.length === 1) {
+        if (!g.length || !g.every(isValidGroupElement)) {
+          warnings.push(t ? t.warnGroupingInvalid(mn) : `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`);
+          g = null;
+        } else if (g.length === 1) {
+          // Single-element shortcut: tile to fill the measure if it divides evenly
           const elemUnits = typeof g[0] === 'object' ? g[0].units : g[0];
           if (newNum % elemUnits === 0) {
             const reps = newNum / elemUnits;

@@ -101,6 +101,8 @@ const no = {
 36||                  # slutt på stykke`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
+  warnGroupingInvalid: (mn) =>
+    `t.${mn}: ugyldig gruppering — sifrene i en tuplett må summere til div; gruppering ignorert`,
   warnGroupingNotDivisible: (mn, units, num, den) =>
     `t.${mn}: grupperingselement (${units} enhet${units !== 1 ? 'er' : ''}) går ikke opp i ${num}/${den} — gruppering ignorert`,
   warnRitNeedsTarget: (mn) =>

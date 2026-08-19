@@ -219,6 +219,37 @@ describe('tuplets', () => {
       { units: 1, div: 8, slots: [7, 1] });
   });
 
+  test('slots that do not sum to the divisor are rejected', () => {
+    // Left unchecked this yields a NaN beat duration, which stalls the
+    // scheduler silently — no clicks, no error, playback stuck.
+    const { measures, warnings } = parse('1| 4/4 (1+1+1+[3:22]) 1/4=120');
+    assert.equal(measures[1].grouping, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /m\.1.*malformed grouping/);
+  });
+
+  test('a malformed single-element grouping is rejected before tiling', () => {
+    const { measures, warnings } = parse('1| 4/4 ([3:22]) 1/4=120');
+    assert.equal(measures[1].grouping, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /m\.1.*malformed grouping/);
+    assert.doesNotMatch(warnings[0], /NaN/);
+  });
+
+  test('a zero-length beat group is rejected', () => {
+    // A zero duration would spin the scheduler's lookahead loop forever.
+    const { measures, warnings } = parse('1| 4/4 (2+2+0) 1/4=120');
+    assert.equal(measures[1].grouping, null);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /m\.1/);
+  });
+
+  test('a rejected grouping is not remembered for later bare references', () => {
+    const { measures } = parse('1| 4/4 1/4=120\n3| 7/8 (1+1+1+[3:22])\n5| 4/4\n7| 7/8');
+    assert.equal(measures[3].grouping, null);
+    assert.equal(measures[7].grouping, null);
+  });
+
   test('a mixed measure of tuplets and plain beats', () => {
     const g = groupingOf('1| 6/4 ([2:11]+[3:.11]+[2:11]+[3:.11]+2) 1/4=120');
     assert.equal(g.length, 5);

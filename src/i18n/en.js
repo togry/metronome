@@ -103,6 +103,8 @@ const en = {
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   // These are parameterised; keep the function signatures intact.
+  warnGroupingInvalid: (mn) =>
+    `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`,
   warnGroupingNotDivisible: (mn, units, num, den) =>
     `m.${mn}: grouping element (${units} unit${units !== 1 ? 's' : ''}) does not divide ${num}/${den} evenly — grouping ignored`,
   warnRitNeedsTarget: (mn) =>
