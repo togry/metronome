@@ -5,6 +5,8 @@ const en = {
   // ── Header ──────────────────────────────────────────────────────────────────
   appTitle:        '♩ METRONOMICON',
   appSubtitle:     'SCORE-AWARE METRONOME',
+  tooltipReset:    'Reset score and settings to defaults',
+  confirmReset:    'Reset the score and all settings to their defaults? Your saved score will be discarded.',
   btnScore:        'SCORE',
   btnThemeDark:    '☀',
   btnThemeLight:   '🌙',
@@ -218,6 +220,10 @@ const en = {
       '  Sub-clicks are added only where a beat divides evenly.',
       'TEMPO slider  10–150% of written tempo.',
       '☀ / 🌙  Toggle between dark and daylight palettes.',
+      '',
+      'The score and all settings are kept between visits.',
+      '♩ METRONOMICON  Click the title — or press and hold it on a',
+      '  touchscreen — to reset the score and every setting to defaults.',
     ]},
     { h: 'Timeline', body: [
       'Shows the full piece with rehearsal marks, time signatures, and barlines.',

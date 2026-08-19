@@ -6,6 +6,8 @@ const no = {
   // ── Header ──────────────────────────────────────────────────────────────────
   appTitle:        '♩ METRONOMICON',
   appSubtitle:     'NOTESTYRT METRONOM',
+  tooltipReset:    'Nullstill partitur og innstillinger',
+  confirmReset:    'Nullstille partituret og alle innstillinger? Det lagrede partituret blir forkastet.',
   btnScore:        'NOTE',
   btnThemeDark:    '☀',
   btnThemeLight:   '🌙',
@@ -216,6 +218,10 @@ const no = {
       '  Underklikk legges bare til der et slag kan deles likt.',
       'TEMPO velg fra 10% til 150 % av angitt tempo.',
       '☀ / 🌙  Veksle mellom mørkt og lyst tema.',
+      '',
+      'Partituret og alle innstillinger huskes til neste gang.',
+      '♩ METRONOMICON  Klikk på tittelen — eller hold den inne på',
+      '  berøringsskjerm — for å nullstille partitur og innstillinger.',
     ]},
     { h: 'Tidslinje', body: [
       'Viser hele stykket med merker, taktarter og taktlinjer.',

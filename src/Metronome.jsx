@@ -8,6 +8,7 @@ import { getTimelineEvents, computeLoopSeqBounds } from './timeline.js';
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
 import { getDefaultScore, getRitExampleScore, getTupletExampleScore, getStructureExampleScore } from './constants.js';
 import { useLocale, LOCALES } from './i18n/useLocale.js';
+import { loadScore, saveScore, loadSettings, saveSettings } from './storage.js';
 
 import ScorePanel  from './components/ScorePanel.jsx';
 import HelpModal   from './components/HelpModal.jsx';
@@ -17,9 +18,16 @@ import Timeline    from './components/Timeline.jsx';
 // long or when the next tick is due, whichever comes first.
 const FLASH_MAX_SEC = 0.12;
 
+// How long the header title must be held on a touchscreen to reset.
+const RESET_HOLD_MS = 700;
+
 export default function Metronome() {
+  // Settings restored from the last session — read once, then each useState
+  // below falls back to its own default for anything missing.
+  const [saved] = useState(loadSettings);
+
   // ── Theme ──────────────────────────────────────────────────────────────────
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(saved.theme ?? 'dark');
   const C = PALETTES[theme];
 
   // ── i18n ───────────────────────────────────────────────────────────────────
@@ -49,11 +57,88 @@ export default function Metronome() {
   }, [locale]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Score ──────────────────────────────────────────────────────────────────
-  const [scoreText,     setScoreText]     = useState(() => getDefaultScore({}));
-  const [parsed,        setParsed]        = useState(() => parseScore(getDefaultScore({})));
+  // Restored from localStorage when there is one, otherwise the default score.
+  // The parse is guarded: a score saved under an older syntax must not be able
+  // to take the app down on boot.
+  const [scoreText,     setScoreText]     = useState(() => loadScore() ?? getDefaultScore({}));
+  const [parsed,        setParsed]        = useState(() => {
+    try { return parseScore(scoreText); }
+    catch { return parseScore(getDefaultScore({})); }
+  });
   const [parseError,    setParseError]    = useState('');
-  const [parseWarnings, setParseWarnings] = useState([]);
-  const [scoreWidth,    setScoreWidth]    = useState(270);
+  const [parseWarnings, setParseWarnings] = useState(() => parsed.warnings || []);
+
+  // Persist the score, debounced so that typing does not hammer localStorage.
+  // Saving on edit rather than on parse means an accidental reload cannot lose
+  // work in progress, even when it does not parse yet.
+  useEffect(() => {
+    const id = setTimeout(() => saveScore(scoreText), 500);
+    return () => clearTimeout(id);
+  }, [scoreText]);
+
+  // Persist the control settings. Debounced too, since dragging a slider
+  // changes them on every pointer move.
+  useEffect(() => {
+    const id = setTimeout(() => saveSettings({
+      theme, subdivIdx, tempoScale, btLatency,
+      countInEnabled, countInOnRepeat, countInBeats, countInDenom,
+      scoreWidth,
+    }), 300);
+    return () => clearTimeout(id);
+  }, [theme, subdivIdx, tempoScale, btLatency,
+      countInEnabled, countInOnRepeat, countInBeats, countInDenom, scoreWidth]);
+
+  // Reset everything to factory defaults, from the ♩ in the header. Destructive
+  // now that the score persists, so it asks first — window.confirm rather than
+  // an in-app dialog, since the header has no room for another control.
+  // The two persist effects above write the defaults back out on the next tick,
+  // so there is nothing to clear by hand.
+  // Mouse clicks reset directly; touch must press and hold, so that a stray tap
+  // on the header cannot wipe a score. pointerType is recorded on every press,
+  // which keeps hybrid touch-and-mouse machines working both ways.
+  const resetHoldRef = useRef({ timer: null, pointerType: 'mouse' });
+
+  function resetPointerDown(e) {
+    const st = resetHoldRef.current;
+    st.pointerType = e.pointerType || 'mouse';
+    clearTimeout(st.timer);
+    st.timer = null;
+    if (st.pointerType === 'mouse') return;
+    st.timer = setTimeout(() => { st.timer = null; handleReset(); }, RESET_HOLD_MS);
+  }
+
+  function resetPointerCancel() {
+    clearTimeout(resetHoldRef.current.timer);
+    resetHoldRef.current.timer = null;
+  }
+
+  function resetClick() {
+    if (resetHoldRef.current.pointerType !== 'mouse') return;
+    handleReset();
+  }
+
+  useEffect(() => () => clearTimeout(resetHoldRef.current.timer), []);
+
+  function handleReset() {
+    if (typeof window !== 'undefined' && !window.confirm(t.confirmReset)) return;
+    setPlaying(false);
+    const def = getDefaultScore(t);
+    setScoreText(def);
+    try {
+      const p = parseScore(def, t);
+      setParsed(p); setParseError(''); setParseWarnings(p.warnings || []);
+    } catch (e) { setParseError(e.message); }
+    setTheme('dark');
+    setSubdivIdx(1);
+    setTempoScale(100);
+    setBtLatency(0);
+    setCountInEnabled(false); setCountInOnRepeat(false);
+    setCountInBeats(4);       setCountInDenom(4);
+    setScoreWidth(270);
+    setStartMeasure(1); setPreviewMeasure(1);
+    setLoopStart(null); setLoopEnd(null);
+  }
+  const [scoreWidth,    setScoreWidth]    = useState(saved.scoreWidth ?? 270);
   const [showScore,     setShowScore]     = useState(false); // mobile drawer
 
   // ── Playback state ─────────────────────────────────────────────────────────
@@ -72,14 +157,14 @@ export default function Metronome() {
   const [loopEnd,        setLoopEnd]        = useState(null);
 
   // ── Controls ───────────────────────────────────────────────────────────────
-  const [subdivIdx,      setSubdivIdx]      = useState(1);   // 'Primary beats' — index 0 is 'Once per measure'
-  const [tempoScale,     setTempoScale]     = useState(100);
-  const [btLatency,      setBtLatency]      = useState(0);
+  const [subdivIdx,      setSubdivIdx]      = useState(saved.subdivIdx ?? 1);   // 'Primary beats' — index 0 is 'Once per measure'
+  const [tempoScale,     setTempoScale]     = useState(saved.tempoScale ?? 100);
+  const [btLatency,      setBtLatency]      = useState(saved.btLatency ?? 0);
   const [showBtSlider,   setShowBtSlider]   = useState(false);
-  const [countInEnabled,    setCountInEnabled]    = useState(false);
-  const [countInOnRepeat,   setCountInOnRepeat]   = useState(false);
-  const [countInBeats,      setCountInBeats]      = useState(4);
-  const [countInDenom,      setCountInDenom]      = useState(4);
+  const [countInEnabled,    setCountInEnabled]    = useState(saved.countInEnabled  ?? false);
+  const [countInOnRepeat,   setCountInOnRepeat]   = useState(saved.countInOnRepeat ?? false);
+  const [countInBeats,      setCountInBeats]      = useState(saved.countInBeats    ?? 4);
+  const [countInDenom,      setCountInDenom]      = useState(saved.countInDenom    ?? 4);
   const [countingIn,        setCountingIn]        = useState(false);
   const [countInRemaining,  setCountInRemaining]  = useState(0);
 
@@ -849,7 +934,19 @@ export default function Metronome() {
             borderRadius: 3, fontSize: 12, letterSpacing: 1, flexShrink: 0,
           }}>{t.btnScore}</button>
         )}
-        <div style={{ fontSize: mobile ? 13 : 17, letterSpacing: mobile ? 2 : 4, color: C.gold, fontWeight: 'bold', flexShrink: 0 }}>{t.appTitle}</div>
+        <div
+          onClick={resetClick}
+          onPointerDown={resetPointerDown}
+          onPointerUp={resetPointerCancel}
+          onPointerLeave={resetPointerCancel}
+          onPointerCancel={resetPointerCancel}
+          title={t.tooltipReset}
+          style={{ fontSize: mobile ? 13 : 17, letterSpacing: mobile ? 2 : 4, color: C.gold, fontWeight: 'bold', flexShrink: 0,
+                   cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none',
+                   // Suppress the iOS text-selection callout that a long press
+                   // would otherwise raise on top of the confirm dialog.
+                   WebkitTouchCallout: 'none', touchAction: 'manipulation' }}
+        >{t.appTitle}</div>
         {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>{t.appSubtitle}</div>}
 
         {/* Desktop: flash dots (left of right controls) */}
