@@ -29,6 +29,7 @@ const en = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'SUBDIVIDE',
   subdivOptions: [
+    'Once per measure',
     'Primary beats',
     'Subdivided to 4ths',
     'Subdivided to 8ths',
@@ -212,7 +213,8 @@ const en = {
       '▶ / ◼  Play and stop.',
       'COUNT IN  Adds a count-in before playback; choose beats and note value.',
       '  ON REPEAT: also insert a count-in each time a loop or score repeats.',
-      'SUBDIVIDE  Primary beats only, or subdivided to 4ths / 8ths / 16ths / 32nds.',
+      'SUBDIVIDE  Once per measure, primary beats only, or subdivided to',
+      '  4ths / 8ths / 16ths / 32nds.',
       '  Sub-clicks are added only where a beat divides evenly.',
       'TEMPO slider  10–150% of written tempo.',
       '☀ / 🌙  Toggle between dark and daylight palettes.',

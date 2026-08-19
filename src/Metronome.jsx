@@ -13,6 +13,10 @@ import ScorePanel  from './components/ScorePanel.jsx';
 import HelpModal   from './components/HelpModal.jsx';
 import Timeline    from './components/Timeline.jsx';
 
+// How long a beat indicator stays lit, in seconds. The flash ends after this
+// long or when the next tick is due, whichever comes first.
+const FLASH_MAX_SEC = 0.12;
+
 export default function Metronome() {
   // ── Theme ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState('dark');
@@ -68,7 +72,7 @@ export default function Metronome() {
   const [loopEnd,        setLoopEnd]        = useState(null);
 
   // ── Controls ───────────────────────────────────────────────────────────────
-  const [subdivIdx,      setSubdivIdx]      = useState(0);
+  const [subdivIdx,      setSubdivIdx]      = useState(1);   // 'Primary beats' — index 0 is 'Once per measure'
   const [tempoScale,     setTempoScale]     = useState(100);
   const [btLatency,      setBtLatency]      = useState(0);
   const [showBtSlider,   setShowBtSlider]   = useState(false);
@@ -99,6 +103,11 @@ export default function Metronome() {
 
   const posRef             = useRef({ seqIdx: 0, tick: 0 });
   const nextTickTimeRef    = useRef(0);
+  // Audio-clock start time and total length of the measure being scheduled —
+  // stamped onto each queued visual so the playhead can glide within the bar.
+  const measureStartAtRef  = useRef(0);
+  const measureSecRef      = useRef(1);
+  const playheadRef        = useRef(null);
   const isPlayingRef       = useRef(false);
   const parsedRef          = useRef(parsed);          parsedRef.current = parsed;
   // Pending visual update — written by scheduler, consumed by rAF loop
@@ -224,21 +233,42 @@ export default function Metronome() {
         osc.start(tAudio); osc.stop(tAudio + 0.07);
       }
 
+      const tickSec = tickData.durationUnits * tickDurationSec(mState, pattern, tickIdx, tempoScaleRef.current);
+
+      // At the top of each bar, record when it starts and how long it runs, so
+      // the playhead can interpolate across it. Summed from the same per-tick
+      // function that drives the clicks, so rit/accel bars come out right.
+      if (tick === 0) {
+        measureStartAtRef.current = t;
+        measureSecRef.current =
+          pattern.reduce((s, tk, ti) => s + tk.durationUnits * tickDurationSec(mState, pattern, ti, tempoScaleRef.current), 0) || tickSec;
+      }
+
       // Queue visual update — consumed by the rAF loop.
       // Storing fireAt (audio clock value) lets the rAF loop fire with
       // sub-millisecond accuracy instead of relying on setTimeout jitter.
+      //
+      // offAt darkens the indicator FLASH_MAX_SEC after it lights, or when the
+      // next tick is due, whichever comes first. Without an off-time the flash
+      // relies on the next tick landing somewhere else to end it, so a pattern
+      // whose ticks all target the same dot — 'once per measure', or any
+      // single-beat bar — would stay permanently lit. At fast subdivisions the
+      // cap never binds and the dot stays lit right up to the next tick, as before.
       if (!pendingVisualRef.current) pendingVisualRef.current = [];
       pendingVisualRef.current.push({
         measure,
         beat:    tickIdx,
         weight:  tickData.weight,
         fireAt:  t,   // ctx.currentTime value at which visuals should fire
+        offAt:   t + Math.min(FLASH_MAX_SEC, tickSec),
+        measureStartAt: measureStartAtRef.current,
+        measureSec:     measureSecRef.current,
       });
 
       if (tick + 1 >= pattern.length) posRef.current = { seqIdx: seqIdx + 1, tick: 0 };
       else posRef.current = { seqIdx, tick: tick + 1 };
 
-      nextTickTimeRef.current += tickData.durationUnits * tickDurationSec(mState, pattern, tickIdx, tempoScaleRef.current);
+      nextTickTimeRef.current += tickSec;
     }
   }, []);
 
@@ -267,6 +297,14 @@ export default function Metronome() {
     const FLASH_COLORS_DARK  = { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' };
     const FLASH_COLORS_LIGHT = { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
 
+    // Audio-clock time at which the current flash should go dark, or null when
+    // nothing is lit. Set by the queue drain below, cleared when it expires.
+    let flashOffAt = null;
+
+    // Timing of the bar the playhead is currently crossing.
+    let needleStartAt = null;
+    let needleSec     = 1;
+
     // Dim all pattern dots unconditionally — don't rely on _active flag
     // since React ref callbacks reset _active without updating DOM styles.
     function dimAllDots() {
@@ -282,12 +320,30 @@ export default function Metronome() {
       }
     }
 
-    function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
-      const isRest      = weight === 0;
-      const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
+    // Paint the three header flash dots, lighting `activeKey` and dimming the
+    // rest. Pass null to dim all of them.
+    function paintFlashDots(activeKey) {
       const isDark      = themeRef.current === 'dark';
       const mobileNow   = mobileRef.current;
       const flashColors = isDark ? FLASH_COLORS_DARK : FLASH_COLORS_LIGHT;
+      for (const key of ['measure', 'primary', 'unit']) {
+        const el = flashDotsRef.current[key];
+        if (!el) continue;
+        const active = key === activeKey;
+        const col    = flashColors[key];
+        const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
+        el.style.width      = sz;
+        el.style.height     = sz;
+        el.style.background = active ? col : col + '28';
+        el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
+        const label = el.parentElement?.nextElementSibling;
+        if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
+      }
+    }
+
+    function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
+      const isRest      = weight === 0;
+      const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
 
       // Coarse state update — re-render only when measure actually changes
       if (capM !== currentMeasureRef.current) {
@@ -299,19 +355,7 @@ export default function Metronome() {
       if (!isRest) flashRef.current = capFlash;
 
       // Header flash dots — on a rest, dim all (no flash)
-      for (const key of ['measure', 'primary', 'unit']) {
-        const el = flashDotsRef.current[key];
-        if (!el) continue;
-        const active = !isRest && lightDot && key === capFlash;
-        const col    = flashColors[key];
-        const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
-        el.style.width      = sz;
-        el.style.height     = sz;
-        el.style.background = active ? col : col + '28';
-        el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
-        const label = el.parentElement?.nextElementSibling;
-        if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
-      }
+      paintFlashDots(!isRest && lightDot ? capFlash : null);
 
       // Pattern dots — dim everything, then light capT unless it's a rest
       dimAllDots();
@@ -356,10 +400,36 @@ export default function Metronome() {
           // light a dot — lighting then immediately dimming causes a visible burst.
           // Only the last due event gets the full lit treatment.
           for (let j = 0; j < i - 1; j++) applyVisual(queue[j], false);
-          applyVisual(queue[i - 1], true);
+          const lit = queue[i - 1];
+          applyVisual(lit, true);
+          flashOffAt    = lit.weight > 0 ? lit.offAt : null;
+          needleStartAt = lit.measureStartAt;
+          needleSec     = lit.measureSec || 1;
           pendingVisualRef.current = queue.slice(i);
         }
       }
+
+      // Glide the playhead across the current bar. Driven straight from the
+      // audio clock every frame — no React state, so no re-render per beat.
+      // Frozen where it stands when stopped: we simply stop writing to it.
+      if (ctx && isPlayingRef.current && needleStartAt !== null) {
+        const el = playheadRef.current;
+        // Skip while React has yet to move the element to the current bar —
+        // its `left` and our offset would otherwise disagree for a frame.
+        if (el && el._measure === currentMeasureRef.current) {
+          const frac = Math.max(0, Math.min(1, (ctx.currentTime - needleStartAt) / needleSec));
+          el.style.transform = `translateX(${frac * (el._slotPx || 0)}px)`;
+        }
+      }
+
+      // End the flash once its off-time passes. Checked after the queue drain
+      // so a tick that lights in this same frame is not immediately dimmed.
+      if (ctx && flashOffAt !== null && ctx.currentTime >= flashOffAt) {
+        flashOffAt = null;
+        paintFlashDots(null);
+        dimAllDots();
+      }
+
       rafRef.current = requestAnimationFrame(rafLoop);
     }
 
@@ -1232,6 +1302,7 @@ export default function Metronome() {
             startMeasure={startMeasure} currentMeasure={currentMeasure}
             playing={playing}
             timelineRef={timelineRef} timelineScrollRef={timelineScrollRef}
+            playheadRef={playheadRef}
             onMouseDown={handleTimelineMouseDown}
             onTouchStart={handleTimelineTouchStart}
             onTouchMove={handleTimelineTouchMove}

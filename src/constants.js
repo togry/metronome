@@ -1,6 +1,9 @@
 // ─── Subdivision options ──────────────────────────────────────────────────────
 
+// targetDenom: -1 = one click per measure; 0 = primary beats only;
+// 4/8/16/32 = subdivide to that note value.
 export const SUBDIV_OPTIONS = [
+  { label: 'Once per measure',   targetDenom: -1 },
   { label: 'Primary beats',      targetDenom: 0  },
   { label: 'Subdivided to 4ths', targetDenom: 4  },
   { label: 'Subdivided to 8ths', targetDenom: 8  },

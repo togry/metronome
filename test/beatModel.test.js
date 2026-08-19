@@ -74,6 +74,54 @@ describe('primary beats only', () => {
   });
 });
 
+describe('once per measure', () => {
+  test('4/4 is a single downbeat spanning the bar', () => {
+    const p = getBeatPattern(measure('1| 4/4 1/4=120'), -1);
+    assert.equal(p.length, 1);
+    assert.equal(p[0].weight, 3);
+    assert.equal(p[0].durationUnits, 4);
+  });
+
+  test('the click lasts the whole measure whatever the meter', () => {
+    for (const [score, units] of [['1| 3/4 1/4=120', 3], ['1| 5/4 1/4=120', 5],
+                                  ['1| 6/8 1/4.=60', 6], ['1| 2/2 1/2=60', 2]]) {
+      const p = getBeatPattern(measure(score), -1);
+      assert.equal(p.length, 1, score);
+      assert.equal(p[0].durationUnits, units, score);
+    }
+  });
+
+  test('an odd meter collapses regardless of its grouping', () => {
+    const p = getBeatPattern(measure('1| 7/8 (2+2+3) 1/4=120'), -1);
+    assert.deepEqual(p, [{ weight: 3, durationUnits: 7 }]);
+  });
+
+  test('tuplets collapse too — nothing sounds between downbeats', () => {
+    const p = getBeatPattern(measure('1| 4/4 ([3:21]) 1/4=120'), -1);
+    assert.equal(p.length, 1);
+    assert.equal(p[0].weight, 3);
+    assert.ok(Math.abs(p[0].durationUnits - 4) < 1e-9);
+  });
+
+  test('a measure of rests still gives one audible downbeat', () => {
+    const p = getBeatPattern(measure('1| 4/4 (1+1+[3:.11]+[3:.11]) 1/4=120'), -1);
+    assert.equal(p.length, 1);
+    assert.equal(p[0].weight, 3);
+    assert.equal(p[0].rest, undefined);
+  });
+
+  test('the measure lasts as long as it would at any other setting', () => {
+    for (const score of ['1| 4/4 1/4=120', '1| 7/8 (2+2+3) 1/4=120', '1| 6/8 1/4.=60']) {
+      const m = measure(score);
+      const once = getBeatPattern(m, -1);
+      const sec  = once[0].durationUnits * tickDurationSec(m, once, 0, 1);
+      const beats = getBeatPattern(m, 0);
+      const secBeats = beats.reduce((s, t, i) => s + t.durationUnits * tickDurationSec(m, beats, i, 1), 0);
+      assert.ok(Math.abs(sec - secBeats) < 1e-9, score);
+    }
+  });
+});
+
 describe('subdivision', () => {
   test('4/4 subdivided to 8ths', () => {
     const p = getBeatPattern(measure('1| 4/4 1/4=120'), 8);

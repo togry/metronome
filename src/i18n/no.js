@@ -30,6 +30,7 @@ const no = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'UNDERDELING',
   subdivOptions: [
+    'Én gang per takt',
     'Bare pulsslag',
     '4-deler',
     '8-deler',
@@ -210,7 +211,8 @@ const no = {
       '▶ / ◼  Spill og stopp.',
       'OPPSLAG  Legger til oppslag før avspilling; velg antall slag og noteverdi.',
       '  VED REPETISJON: legg også til oppslag ved hver løkke- eller stykkerepetisjon.',
-      'UNDERDELING  Bare pulsslag, eller underdelt til 4-deler / 8-deler / 16-deler / 32-deler.',
+      'UNDERDELING  Én gang per takt, bare pulsslag, eller underdelt til',
+      '  4-deler / 8-deler / 16-deler / 32-deler.',
       '  Underklikk legges bare til der et slag kan deles likt.',
       'TEMPO velg fra 10% til 150 % av angitt tempo.',
       '☀ / 🌙  Veksle mellom mørkt og lyst tema.',

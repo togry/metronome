@@ -8,7 +8,7 @@ export default function Timeline({
   totalMeasures, timelineContentWidth, pxPerSlot, measPx,
   timelineEvents,
   loopStart, loopEnd, startMeasure, currentMeasure, playing,
-  timelineRef, timelineScrollRef,
+  timelineRef, timelineScrollRef, playheadRef,
   onMouseDown, onTouchStart, onTouchMove, onTouchEnd,
 }) {
   const activeLineRef = useRef(null);
@@ -124,8 +124,8 @@ export default function Timeline({
           }}
         >
           {lines.map((line, li) => {
-            const lineHasActive = playing
-              && currentMeasure >= line.start
+            // Not gated on `playing` — the playhead stays where it stopped.
+            const lineHasActive = currentMeasure >= line.start
               && currentMeasure <= line.end;
             const lineHasStart  = startMeasure >= line.start
               && startMeasure <= line.end;
@@ -266,13 +266,28 @@ export default function Timeline({
                     );
                   })}
 
-                {/* Playhead */}
+                {/* Playhead — `left` snaps to the bar, and the rAF loop in
+                    Metronome adds a translateX to glide across it. Resetting
+                    the offset here, as the element is attached, keeps it from
+                    overshooting for a frame when the bar changes. */}
                 {lineHasActive && (
-                  <div style={{
+                  <div
+                    ref={el => {
+                      if (!el || !playheadRef) return;
+                      if (el._measure !== currentMeasure) el.style.transform = 'translateX(0px)';
+                      el._measure       = currentMeasure;
+                      el._slotPx        = filledSlotPx;
+                      playheadRef.current = el;
+                    }}
+                    style={{
                     position: 'absolute',
                     left: xInLine(currentMeasure, line.start),
                     top: -4, bottom: -4, width: 2,
-                    background: C.measure, boxShadow: `0 0 8px ${C.measure}`,
+                    background: C.measure,
+                    // Lit while playing; dimmed and unglowing once stopped, so a
+                    // frozen needle reads as a position marker, not a playhead.
+                    boxShadow: playing ? `0 0 8px ${C.measure}` : 'none',
+                    opacity:   playing ? 1 : 0.4,
                     pointerEvents: 'none',
                   }}>
                     <div style={{
