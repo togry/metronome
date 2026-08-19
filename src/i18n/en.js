@@ -115,6 +115,8 @@ const en = {
     `m.${mn}: close-repeat ':|' has no matching open repeat`,
   warnDoubleBarNoOpen: (mn) =>
     `m.${mn}: ':||' has no matching open repeat — use '||' to end the score`,
+  warnNestedRepeat: (mn, openMn) =>
+    `m.${mn}: opens a repeat while the one at m.${openMn} is still open — nested repeats are not standard notation; use D.C./D.S. for larger-scale repetition`,
 
   // ── Help modal ───────────────────────────────────────────────────────────────
   helpTitle:       '♩ METRONOMICON — HELP',

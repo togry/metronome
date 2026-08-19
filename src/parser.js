@@ -401,7 +401,15 @@ export function parseScore(text, t) {
           warnings.push(t ? t.warnDoubleBarNoOpen(n) : `m.${n}: ':||' has no matching open repeat — use '||' to end the score`);
         }
       }
-      if (sep === '|:' || sep === '||:') { stack.push(n); anyRepeatSeen = true; }
+      if (sep === '|:' || sep === '||:') {
+        // Nested repeat signs are not standard notation — repetition at a
+        // larger scale is written with D.C./D.S. instead. Warn, but still
+        // pair innermost-first so playback stays predictable.
+        if (stack.length > 0)
+          warnings.push(t ? t.warnNestedRepeat(n, stack[stack.length - 1]) : `m.${n}: opens a repeat while the one at m.${stack[stack.length - 1]} is still open — nested repeats are not standard notation; use D.C./D.S. for larger-scale repetition`);
+        stack.push(n);
+        anyRepeatSeen = true;
+      }
     }
   }
 

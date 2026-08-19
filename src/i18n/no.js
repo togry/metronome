@@ -113,6 +113,8 @@ const no = {
     `t.${mn}: slutt repetisjon ':|' mangler tilhørende start repetisjon`,
   warnDoubleBarNoOpen: (mn) =>
     `t.${mn}: ':||' mangler tilhørende start repetisjon — bruk '||' for å avslutte stykket`,
+  warnNestedRepeat: (mn, openMn) =>
+    `t.${mn}: starter en repetisjon mens den fra t.${openMn} fortsatt er åpen — nøstede repetisjoner er ikke vanlig notasjon; bruk D.C./D.S. for repetisjon i større skala`,
 
   // ── Help modal ───────────────────────────────────────────────────────────────
   helpTitle:       '♩ METRONOMICON — HJELP',
