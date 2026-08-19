@@ -185,6 +185,19 @@ The curve spans to the next explicit tempo mark or `a tempo`.
 12| 1/4=160            arrival; accel spreads across m.7-11
 ```
 
+The target tempo may be **omitted** when it is the same as the tempo that
+follows — it is then taken from the next tempo mark:
+
+```
+1| 4/4 1/4=120 rit     no target given …
+5| 1/4=60              … so the rit arrives at 60 here
+7| 1/4=120
+```
+
+This short form cannot be combined with `a tempo`, since there is then no
+following tempo mark to take the target from; write the target explicitly in
+that case.
+
 Use `a tempo` to snap back to the tempo that was in effect before the rit/accel:
 
 ```
@@ -212,6 +225,10 @@ plays twice.
 | `DS al Fine` | Jump to `$` (segno); stop at `Fine` |
 | `DS al Coda` | Jump to `$`; at `@` jump to the `Coda` section |
 
+The return pass is **senza replica** — repeat signs are not taken on the way
+back, as is usual. Repetition at a larger scale is what D.C./D.S. is for;
+nested repeat signs are not standard notation and are not supported.
+
 **End of score** — the last `||` or matched `:|` ends playback. Omit it
 entirely for a practice loop that repeats from m.1.
 
@@ -226,6 +243,25 @@ are ignored.
 16:|| [A]              # section A ends here
 ```
 
+### Parse warnings
+
+Structural problems are listed in amber below the score editor after parsing.
+They never block playback — the parser falls back to reasonable behaviour and
+plays on.
+
+| Warning | Fallback |
+|---------|----------|
+| A grouping is malformed — a tuplet's slots do not sum to its divisor | Grouping ignored |
+| A grouping element does not divide the measure evenly | Grouping ignored |
+| `rit`/`accel` needs a target tempo (short form used with `a tempo`) | Curve dropped |
+| `rit`/`accel` has no target and no following tempo mark | Curve dropped |
+| `:\|` has no matching open repeat, after an earlier repeat | Repeats from m.1 |
+| `:\|\|` has no matching open repeat | Treated as a plain end barline |
+| `\|:` opens while another repeat is still open (nested repeats) | Paired innermost-first |
+
+A `:|` with no open repeat *anywhere* in the score is not a warning — it is
+the ordinary way to write a piece that repeats from the top.
+
 ---
 
 ## Controls
@@ -236,12 +272,33 @@ are ignored.
 - **COUNT IN** — checkbox to enable a count-in before playback; choose 2, 3,
   or 4 beats of quarters or eighths. Tick **ON REPEAT** to also insert a
   count-in each time a loop region or looping score wraps around.
-- **SUBDIVIDE** — primary beats only, or subdivided to 4ths / 8ths / 16ths /
-  32nds (sub-clicks added only where the beat divides evenly)
+- **SUBDIVIDE** — how much to click:
+  - *Once per measure* — a single downbeat per bar, for conducting long or
+    fast passages by the measure rather than the beat
+  - *Primary beats* — one click per beat group (the default)
+  - *Subdivided to 4ths / 8ths / 16ths / 32nds* — sub-clicks added only where
+    the beat divides evenly
 - **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider
 - **BT** — Bluetooth latency offset (0–500 ms); compensates for wireless
   headphone delay so clicks and visual flashes align with what you hear
 - **☀ / 🌙** — toggle between dark and daylight colour palettes
+
+### Saved state and reset
+
+The score and every control setting — theme, subdivision, tempo scale, BT
+offset, count-in, and the width of the score panel — are kept in the browser
+and restored on the next visit. Nothing leaves the machine; it is all
+`localStorage`, per browser and per device.
+
+The score is saved as you type, not only when you press PARSE, so an
+accidental reload cannot lose work that does not parse yet. Clearing the
+editor and reloading brings the default score back rather than an empty box.
+
+To start over, use the **♩ METRONOMICON** title in the header: click it on a
+desktop, or press and hold it for about a second on a touchscreen. It asks for
+confirmation, then returns the score and all settings to their defaults. The
+interface language is not affected — that has its own control and its own
+saved setting.
 
 ### Click sounds
 
@@ -262,16 +319,37 @@ are ignored.
 
 Arrow keys and Space are ignored while typing in the score editor.
 
+### Pattern visualiser
+
+Above the timeline, one dot per click in the current measure, sized and
+coloured by weight (downbeat / primary / subdivision). Rests are drawn as
+small hollow dots. Each click flashes its dot for about 120 ms, or until the
+next click if that comes sooner — so fast subdivisions read as a moving light
+and slow beats as a distinct pulse. The header line shows the measure number,
+any rehearsal mark, the grouping, and the resulting click count.
+
+When stopped, the visualiser previews whatever measure the cursor is on, so
+you can step through the piece with the arrow keys and see each bar's pattern
+without playing it.
+
 ### Timeline
 
-Shows the full piece with rehearsal marks, time signature changes, and
-barline markers. Scrolls horizontally for long pieces.
+Shows the full piece with rehearsal marks, time signature changes, groupings,
+and barline markers, in four label rows per line. Long pieces **wrap onto
+multiple lines** and the strip scrolls vertically, auto-scrolling to keep the
+playing line in view.
 
 **Desktop:** click to set cursor · drag to define loop · shift-click to set
-loop end · playhead tracks position in real time.
+loop end.
 
 **Mobile:** tap to set cursor · double-tap then drag to define loop ·
 two-finger drag to scroll.
+
+The playhead glides continuously across each bar rather than stepping from
+barline to barline, so it shows where you are within the measure whatever the
+subdivision setting. On stop it stays where it stood, dimmed, as a marker of
+where playback left off — distinct from the cursor, which is where playback
+will next begin.
 
 ### Loops
 
@@ -279,11 +357,8 @@ When a loop region is defined, only measures within that region play and
 repeat. Repeat sections fully inside the loop are honoured (play twice per
 cycle). The loop end is inclusive.
 
-### Measure grid
-
-Click any tile to set the cursor. Active measure highlighted in gold; loop
-region in orange. Tiles show time signature, grouping, and structural
-markers (`$`, `@`, directives).
+The **START** and **LOOP END** number inputs below the pattern visualiser set
+the same values numerically, with a **CLEAR LOOP** button beside them.
 
 ---
 
@@ -309,11 +384,97 @@ src/
   beatModel.js       beat patterns, tempo math (pure functions)
   timeline.js        timeline event list, loop seq bounds
   constants.js       palettes, subdivision options, example scores
+  storage.js         score and settings persistence (localStorage)
   Metronome.jsx      top-level component: all state, scheduler, layout
   main.jsx           React entry point
   components/
     ScorePanel.jsx   score editor, clear/paste/parse buttons
     HelpModal.jsx    in-app help overlay
     Timeline.jsx     timeline strip with markers and playhead
-    MeasureGrid.jsx  measure tile grid
+  i18n/
+    index.js         locale registry, detection, `t` proxy
+    useLocale.js     React hook — [t, locale, setLocale]
+    en.js  no.js     string tables
+extractor.html       standalone tool, not part of the app build
 ```
+
+### Architecture
+
+**The score is fully expanded at parse time.** `parseScore()` returns both
+`measures[]` (state per *written* measure number) and `seq[]` — a flat array
+of measure numbers in playback order, with every repeat, D.C./D.S. jump, and
+coda skip already resolved. The scheduler just walks `seq[]`; it never has to
+reason about musical structure. Measure numbers shown anywhere in the UI are
+always written numbers, never played positions. Expansion is capped at 10 000
+entries as a runaway guard for pathological scores.
+
+**Audio and visuals are driven off the audio clock, not timers.** The
+scheduler runs a 150 ms lookahead, queueing WebAudio oscillator clicks at
+exact `AudioContext` times, and pushes each tick's visual state onto a queue
+tagged with the time it should fire. A `requestAnimationFrame` loop drains
+that queue by comparing against `ctx.currentTime` and mutates the DOM
+directly, so flashes stay locked to the clicks without `setTimeout` jitter or
+a React re-render per beat. React state updates only when the measure
+changes. The **BT** control offsets audio earlier than visuals to compensate
+for Bluetooth output latency.
+
+Two things ride on that same loop. Each queued tick carries an *off* time as
+well as a fire time, so a flash ends on its own rather than waiting to be
+replaced by the next one — without which any pattern whose ticks all target
+the same dot, such as *once per measure*, would sit permanently lit. And each
+tick carries the start time and length of its bar, which lets the loop
+interpolate the playhead across the bar every frame, again with no React
+state involved.
+
+**Tempo curves are per tick.** `rit`/`accel` spans are resolved to a start
+BPM, target BPM, and a total length in denominator units; each tick
+interpolates its own duration from its offset into the span, so the tempo
+moves smoothly within a bar rather than stepping at barlines.
+
+**Persistence degrades quietly.** `storage.js` guards every `localStorage`
+access, including the lookup of the global itself — reading it throws when
+site data is blocked, and writing throws on a full quota. A failed save is
+never worth an exception, so the app runs unchanged when persistence is
+unavailable. Settings are one JSON blob and `loadSettings()` always returns an
+object, so each caller falls back per key: a blob written before a setting
+existed still restores every other setting. Callers use `??` rather than `||`,
+since `false` and `0` are meaningful values for the count-in and BT offset.
+The initial parse of a restored score is wrapped in try/catch — a score saved
+under a syntax that later changes must not be able to take the app down on
+boot, leaving no way to reach the editor and fix it.
+
+### Localization
+
+UI strings live in `src/i18n/`, currently English and Norwegian. `t` is a
+Proxy that reads from the active locale and falls back to English for any
+missing key, so a partial translation is safe to ship. Some entries are
+functions (`t.patternClicks(3)`) and some are whole example scores, which
+means the example scores and parser warnings are translatable too. The locale
+is detected from `navigator.language` and overridable from the flag menu in
+the header; the choice persists in `localStorage` under
+`metronomicon_locale`.
+
+To add a locale: copy `en.js`, translate, and register it in the `LOCALES`
+map in `index.js`.
+
+### extractor.html
+
+A standalone single-file tool ("Score → Conductor Timesheet") for turning a
+score into a printable timesheet. It is not built, imported, or deployed by
+the app — open it directly in a browser.
+
+### Tests
+
+```bash
+npm test
+```
+
+Runs the test suite (`test/*.test.js`) on Node's built-in test runner —
+no dependencies, no config. It covers the score language: barlines and
+repeat expansion, D.C./D.S. al Fine/Coda, groupings and their inheritance,
+tuplet slots, tempo, rit/accel spans, and every warning case. It also checks
+the beat patterns each subdivision setting produces, that every locale carries
+a label for every control option, and that persistence round-trips — including
+the cases where `localStorage` is absent or throws. What it exercises is
+`parser.js`, `beatModel.js`, `storage.js`, and the option tables — all pure;
+the React layer and the scheduler are not covered.

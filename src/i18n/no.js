@@ -6,6 +6,8 @@ const no = {
   // ── Header ──────────────────────────────────────────────────────────────────
   appTitle:        '♩ METRONOMICON',
   appSubtitle:     'NOTESTYRT METRONOM',
+  tooltipReset:    'Nullstill partitur og innstillinger',
+  confirmReset:    'Nullstille partituret og alle innstillinger? Det lagrede partituret blir forkastet.',
   btnScore:        'NOTE',
   btnThemeDark:    '☀',
   btnThemeLight:   '🌙',
@@ -30,6 +32,7 @@ const no = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'UNDERDELING',
   subdivOptions: [
+    'Én gang per takt',
     'Bare pulsslag',
     '4-deler',
     '8-deler',
@@ -101,6 +104,8 @@ const no = {
 36||                  # slutt på stykke`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
+  warnGroupingInvalid: (mn) =>
+    `t.${mn}: ugyldig gruppering — sifrene i en tuplett må summere til div; gruppering ignorert`,
   warnGroupingNotDivisible: (mn, units, num, den) =>
     `t.${mn}: grupperingselement (${units} enhet${units !== 1 ? 'er' : ''}) går ikke opp i ${num}/${den} — gruppering ignorert`,
   warnRitNeedsTarget: (mn) =>
@@ -113,6 +118,8 @@ const no = {
     `t.${mn}: slutt repetisjon ':|' mangler tilhørende start repetisjon`,
   warnDoubleBarNoOpen: (mn) =>
     `t.${mn}: ':||' mangler tilhørende start repetisjon — bruk '||' for å avslutte stykket`,
+  warnNestedRepeat: (mn, openMn) =>
+    `t.${mn}: starter en repetisjon mens den fra t.${openMn} fortsatt er åpen — nøstede repetisjoner er ikke vanlig notasjon; bruk D.C./D.S. for repetisjon i større skala`,
 
   // ── Help modal ───────────────────────────────────────────────────────────────
   helpTitle:       '♩ METRONOMICON — HJELP',
@@ -206,10 +213,15 @@ const no = {
       '▶ / ◼  Spill og stopp.',
       'OPPSLAG  Legger til oppslag før avspilling; velg antall slag og noteverdi.',
       '  VED REPETISJON: legg også til oppslag ved hver løkke- eller stykkerepetisjon.',
-      'UNDERDELING  Bare pulsslag, eller underdelt til 4-deler / 8-deler / 16-deler / 32-deler.',
+      'UNDERDELING  Én gang per takt, bare pulsslag, eller underdelt til',
+      '  4-deler / 8-deler / 16-deler / 32-deler.',
       '  Underklikk legges bare til der et slag kan deles likt.',
       'TEMPO velg fra 10% til 150 % av angitt tempo.',
       '☀ / 🌙  Veksle mellom mørkt og lyst tema.',
+      '',
+      'Partituret og alle innstillinger huskes til neste gang.',
+      '♩ METRONOMICON  Klikk på tittelen — eller hold den inne på',
+      '  berøringsskjerm — for å nullstille partitur og innstillinger.',
     ]},
     { h: 'Tidslinje', body: [
       'Viser hele stykket med merker, taktarter og taktlinjer.',

@@ -5,6 +5,8 @@ const en = {
   // ── Header ──────────────────────────────────────────────────────────────────
   appTitle:        '♩ METRONOMICON',
   appSubtitle:     'SCORE-AWARE METRONOME',
+  tooltipReset:    'Reset score and settings to defaults',
+  confirmReset:    'Reset the score and all settings to their defaults? Your saved score will be discarded.',
   btnScore:        'SCORE',
   btnThemeDark:    '☀',
   btnThemeLight:   '🌙',
@@ -29,6 +31,7 @@ const en = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'SUBDIVIDE',
   subdivOptions: [
+    'Once per measure',
     'Primary beats',
     'Subdivided to 4ths',
     'Subdivided to 8ths',
@@ -103,6 +106,8 @@ const en = {
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   // These are parameterised; keep the function signatures intact.
+  warnGroupingInvalid: (mn) =>
+    `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`,
   warnGroupingNotDivisible: (mn, units, num, den) =>
     `m.${mn}: grouping element (${units} unit${units !== 1 ? 's' : ''}) does not divide ${num}/${den} evenly — grouping ignored`,
   warnRitNeedsTarget: (mn) =>
@@ -115,6 +120,8 @@ const en = {
     `m.${mn}: close-repeat ':|' has no matching open repeat`,
   warnDoubleBarNoOpen: (mn) =>
     `m.${mn}: ':||' has no matching open repeat — use '||' to end the score`,
+  warnNestedRepeat: (mn, openMn) =>
+    `m.${mn}: opens a repeat while the one at m.${openMn} is still open — nested repeats are not standard notation; use D.C./D.S. for larger-scale repetition`,
 
   // ── Help modal ───────────────────────────────────────────────────────────────
   helpTitle:       '♩ METRONOMICON — HELP',
@@ -208,10 +215,15 @@ const en = {
       '▶ / ◼  Play and stop.',
       'COUNT IN  Adds a count-in before playback; choose beats and note value.',
       '  ON REPEAT: also insert a count-in each time a loop or score repeats.',
-      'SUBDIVIDE  Primary beats only, or subdivided to 4ths / 8ths / 16ths / 32nds.',
+      'SUBDIVIDE  Once per measure, primary beats only, or subdivided to',
+      '  4ths / 8ths / 16ths / 32nds.',
       '  Sub-clicks are added only where a beat divides evenly.',
       'TEMPO slider  10–150% of written tempo.',
       '☀ / 🌙  Toggle between dark and daylight palettes.',
+      '',
+      'The score and all settings are kept between visits.',
+      '♩ METRONOMICON  Click the title — or press and hold it on a',
+      '  touchscreen — to reset the score and every setting to defaults.',
     ]},
     { h: 'Timeline', body: [
       'Shows the full piece with rehearsal marks, time signatures, and barlines.',

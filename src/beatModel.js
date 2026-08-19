@@ -26,10 +26,17 @@ export function getPrimaryGroups(mState) {
   return Array(numerator).fill(1);
 }
 
-// subdivTargetDenom: 0 = primary beats only; 4/8/16/32 = subdivide to that note value
+// subdivTargetDenom: -1 = one click per measure; 0 = primary beats only;
+//                    4/8/16/32 = subdivide to that note value
 export function getBeatPattern(mState, subdivTargetDenom) {
   const { denominator } = mState;
   const groups = getPrimaryGroups(mState);
+
+  // One click per measure — a single downbeat spanning the whole bar,
+  // whatever the meter or grouping. Tuplets are collapsed along with
+  // everything else; there is nothing to sound between downbeats.
+  if (subdivTargetDenom === -1)
+    return [{ weight: 3, durationUnits: groups.reduce((s, g) => s + groupUnits(g), 0) }];
 
   const primaryStarts = new Set();
   let cur = 0;

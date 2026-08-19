@@ -94,6 +94,19 @@ function parseGrouping(str) {
   });
 }
 
+// Is this a usable grouping element?
+// parseGrouping yields NaN for anything it could not read — a tuplet whose
+// slots don't sum to its divisor, a stray token. Those must never reach the
+// beat model: a NaN beat duration stalls the scheduler and a zero-length one
+// spins it, in both cases silently.
+function isValidGroupElement(g) {
+  if (g !== null && typeof g === 'object')
+    return Number.isInteger(g.units) && g.units > 0
+        && Number.isInteger(g.div)   && g.div   > 0
+        && Array.isArray(g.slots)    && g.slots.length > 0;
+  return Number.isInteger(g) && g > 0;
+}
+
 // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
 const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
 
@@ -235,9 +248,12 @@ export function parseScore(text, t) {
       const newDen = c.denominator ?? state.denominator;
       let resolvedGrouping;
       if (c.grouping) {
-        // Single-element shortcut: tile to fill the measure if it divides evenly
         let g = c.grouping;
-        if (g.length === 1) {
+        if (!g.length || !g.every(isValidGroupElement)) {
+          warnings.push(t ? t.warnGroupingInvalid(mn) : `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`);
+          g = null;
+        } else if (g.length === 1) {
+          // Single-element shortcut: tile to fill the measure if it divides evenly
           const elemUnits = typeof g[0] === 'object' ? g[0].units : g[0];
           if (newNum % elemUnits === 0) {
             const reps = newNum / elemUnits;
@@ -401,7 +417,15 @@ export function parseScore(text, t) {
           warnings.push(t ? t.warnDoubleBarNoOpen(n) : `m.${n}: ':||' has no matching open repeat — use '||' to end the score`);
         }
       }
-      if (sep === '|:' || sep === '||:') { stack.push(n); anyRepeatSeen = true; }
+      if (sep === '|:' || sep === '||:') {
+        // Nested repeat signs are not standard notation — repetition at a
+        // larger scale is written with D.C./D.S. instead. Warn, but still
+        // pair innermost-first so playback stays predictable.
+        if (stack.length > 0)
+          warnings.push(t ? t.warnNestedRepeat(n, stack[stack.length - 1]) : `m.${n}: opens a repeat while the one at m.${stack[stack.length - 1]} is still open — nested repeats are not standard notation; use D.C./D.S. for larger-scale repetition`);
+        stack.push(n);
+        anyRepeatSeen = true;
+      }
     }
   }
 

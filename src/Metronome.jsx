@@ -8,14 +8,26 @@ import { getTimelineEvents, computeLoopSeqBounds } from './timeline.js';
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
 import { getDefaultScore, getRitExampleScore, getTupletExampleScore, getStructureExampleScore } from './constants.js';
 import { useLocale, LOCALES } from './i18n/useLocale.js';
+import { loadScore, saveScore, loadSettings, saveSettings } from './storage.js';
 
 import ScorePanel  from './components/ScorePanel.jsx';
 import HelpModal   from './components/HelpModal.jsx';
 import Timeline    from './components/Timeline.jsx';
 
+// How long a beat indicator stays lit, in seconds. The flash ends after this
+// long or when the next tick is due, whichever comes first.
+const FLASH_MAX_SEC = 0.12;
+
+// How long the header title must be held on a touchscreen to reset.
+const RESET_HOLD_MS = 700;
+
 export default function Metronome() {
+  // Settings restored from the last session — read once, then each useState
+  // below falls back to its own default for anything missing.
+  const [saved] = useState(loadSettings);
+
   // ── Theme ──────────────────────────────────────────────────────────────────
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(saved.theme ?? 'dark');
   const C = PALETTES[theme];
 
   // ── i18n ───────────────────────────────────────────────────────────────────
@@ -45,11 +57,26 @@ export default function Metronome() {
   }, [locale]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Score ──────────────────────────────────────────────────────────────────
-  const [scoreText,     setScoreText]     = useState(() => getDefaultScore({}));
-  const [parsed,        setParsed]        = useState(() => parseScore(getDefaultScore({})));
+  // Restored from localStorage when there is one, otherwise the default score.
+  // The parse is guarded: a score saved under an older syntax must not be able
+  // to take the app down on boot.
+  const [scoreText,     setScoreText]     = useState(() => loadScore() ?? getDefaultScore({}));
+  const [parsed,        setParsed]        = useState(() => {
+    try { return parseScore(scoreText); }
+    catch { return parseScore(getDefaultScore({})); }
+  });
   const [parseError,    setParseError]    = useState('');
-  const [parseWarnings, setParseWarnings] = useState([]);
-  const [scoreWidth,    setScoreWidth]    = useState(270);
+  const [parseWarnings, setParseWarnings] = useState(() => parsed.warnings || []);
+
+  // Persist the score, debounced so that typing does not hammer localStorage.
+  // Saving on edit rather than on parse means an accidental reload cannot lose
+  // work in progress, even when it does not parse yet.
+  useEffect(() => {
+    const id = setTimeout(() => saveScore(scoreText), 500);
+    return () => clearTimeout(id);
+  }, [scoreText]);
+
+  const [scoreWidth,    setScoreWidth]    = useState(saved.scoreWidth ?? 270);
   const [showScore,     setShowScore]     = useState(false); // mobile drawer
 
   // ── Playback state ─────────────────────────────────────────────────────────
@@ -68,14 +95,80 @@ export default function Metronome() {
   const [loopEnd,        setLoopEnd]        = useState(null);
 
   // ── Controls ───────────────────────────────────────────────────────────────
-  const [subdivIdx,      setSubdivIdx]      = useState(0);
-  const [tempoScale,     setTempoScale]     = useState(100);
-  const [btLatency,      setBtLatency]      = useState(0);
+  const [subdivIdx,      setSubdivIdx]      = useState(saved.subdivIdx ?? 1);   // 'Primary beats' — index 0 is 'Once per measure'
+  const [tempoScale,     setTempoScale]     = useState(saved.tempoScale ?? 100);
+  const [btLatency,      setBtLatency]      = useState(saved.btLatency ?? 0);
   const [showBtSlider,   setShowBtSlider]   = useState(false);
-  const [countInEnabled,    setCountInEnabled]    = useState(false);
-  const [countInOnRepeat,   setCountInOnRepeat]   = useState(false);
-  const [countInBeats,      setCountInBeats]      = useState(4);
-  const [countInDenom,      setCountInDenom]      = useState(4);
+  const [countInEnabled,    setCountInEnabled]    = useState(saved.countInEnabled  ?? false);
+  const [countInOnRepeat,   setCountInOnRepeat]   = useState(saved.countInOnRepeat ?? false);
+  const [countInBeats,      setCountInBeats]      = useState(saved.countInBeats    ?? 4);
+  const [countInDenom,      setCountInDenom]      = useState(saved.countInDenom    ?? 4);
+
+  // Persist the control settings. Debounced too, since dragging a slider
+  // changes them on every pointer move.
+  // Must sit below every piece of state it names: the dependency array is
+  // evaluated during render, so declaring it earlier would read those consts
+  // in their temporal dead zone and throw before the app ever mounts.
+  useEffect(() => {
+    const id = setTimeout(() => saveSettings({
+      theme, subdivIdx, tempoScale, btLatency,
+      countInEnabled, countInOnRepeat, countInBeats, countInDenom,
+      scoreWidth,
+    }), 300);
+    return () => clearTimeout(id);
+  }, [theme, subdivIdx, tempoScale, btLatency,
+      countInEnabled, countInOnRepeat, countInBeats, countInDenom, scoreWidth]);
+
+  // Reset everything to factory defaults, from the ♩ in the header. Destructive
+  // now that the score persists, so it asks first — window.confirm rather than
+  // an in-app dialog, since the header has no room for another control.
+  // The two persist effects write the defaults back out on the next tick, so
+  // there is nothing to clear by hand.
+  // Mouse clicks reset directly; touch must press and hold, so that a stray tap
+  // on the header cannot wipe a score. pointerType is recorded on every press,
+  // which keeps hybrid touch-and-mouse machines working both ways.
+  const resetHoldRef = useRef({ timer: null, pointerType: 'mouse' });
+
+  function resetPointerDown(e) {
+    const st = resetHoldRef.current;
+    st.pointerType = e.pointerType || 'mouse';
+    clearTimeout(st.timer);
+    st.timer = null;
+    if (st.pointerType === 'mouse') return;
+    st.timer = setTimeout(() => { st.timer = null; handleReset(); }, RESET_HOLD_MS);
+  }
+
+  function resetPointerCancel() {
+    clearTimeout(resetHoldRef.current.timer);
+    resetHoldRef.current.timer = null;
+  }
+
+  function resetClick() {
+    if (resetHoldRef.current.pointerType !== 'mouse') return;
+    handleReset();
+  }
+
+  useEffect(() => () => clearTimeout(resetHoldRef.current.timer), []);
+
+  function handleReset() {
+    if (typeof window !== 'undefined' && !window.confirm(t.confirmReset)) return;
+    setPlaying(false);
+    const def = getDefaultScore(t);
+    setScoreText(def);
+    try {
+      const p = parseScore(def, t);
+      setParsed(p); setParseError(''); setParseWarnings(p.warnings || []);
+    } catch (e) { setParseError(e.message); }
+    setTheme('dark');
+    setSubdivIdx(1);
+    setTempoScale(100);
+    setBtLatency(0);
+    setCountInEnabled(false); setCountInOnRepeat(false);
+    setCountInBeats(4);       setCountInDenom(4);
+    setScoreWidth(270);
+    setStartMeasure(1); setPreviewMeasure(1);
+    setLoopStart(null); setLoopEnd(null);
+  }
   const [countingIn,        setCountingIn]        = useState(false);
   const [countInRemaining,  setCountInRemaining]  = useState(0);
 
@@ -99,6 +192,11 @@ export default function Metronome() {
 
   const posRef             = useRef({ seqIdx: 0, tick: 0 });
   const nextTickTimeRef    = useRef(0);
+  // Audio-clock start time and total length of the measure being scheduled —
+  // stamped onto each queued visual so the playhead can glide within the bar.
+  const measureStartAtRef  = useRef(0);
+  const measureSecRef      = useRef(1);
+  const playheadRef        = useRef(null);
   const isPlayingRef       = useRef(false);
   const parsedRef          = useRef(parsed);          parsedRef.current = parsed;
   // Pending visual update — written by scheduler, consumed by rAF loop
@@ -224,21 +322,42 @@ export default function Metronome() {
         osc.start(tAudio); osc.stop(tAudio + 0.07);
       }
 
+      const tickSec = tickData.durationUnits * tickDurationSec(mState, pattern, tickIdx, tempoScaleRef.current);
+
+      // At the top of each bar, record when it starts and how long it runs, so
+      // the playhead can interpolate across it. Summed from the same per-tick
+      // function that drives the clicks, so rit/accel bars come out right.
+      if (tick === 0) {
+        measureStartAtRef.current = t;
+        measureSecRef.current =
+          pattern.reduce((s, tk, ti) => s + tk.durationUnits * tickDurationSec(mState, pattern, ti, tempoScaleRef.current), 0) || tickSec;
+      }
+
       // Queue visual update — consumed by the rAF loop.
       // Storing fireAt (audio clock value) lets the rAF loop fire with
       // sub-millisecond accuracy instead of relying on setTimeout jitter.
+      //
+      // offAt darkens the indicator FLASH_MAX_SEC after it lights, or when the
+      // next tick is due, whichever comes first. Without an off-time the flash
+      // relies on the next tick landing somewhere else to end it, so a pattern
+      // whose ticks all target the same dot — 'once per measure', or any
+      // single-beat bar — would stay permanently lit. At fast subdivisions the
+      // cap never binds and the dot stays lit right up to the next tick, as before.
       if (!pendingVisualRef.current) pendingVisualRef.current = [];
       pendingVisualRef.current.push({
         measure,
         beat:    tickIdx,
         weight:  tickData.weight,
         fireAt:  t,   // ctx.currentTime value at which visuals should fire
+        offAt:   t + Math.min(FLASH_MAX_SEC, tickSec),
+        measureStartAt: measureStartAtRef.current,
+        measureSec:     measureSecRef.current,
       });
 
       if (tick + 1 >= pattern.length) posRef.current = { seqIdx: seqIdx + 1, tick: 0 };
       else posRef.current = { seqIdx, tick: tick + 1 };
 
-      nextTickTimeRef.current += tickData.durationUnits * tickDurationSec(mState, pattern, tickIdx, tempoScaleRef.current);
+      nextTickTimeRef.current += tickSec;
     }
   }, []);
 
@@ -267,6 +386,14 @@ export default function Metronome() {
     const FLASH_COLORS_DARK  = { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' };
     const FLASH_COLORS_LIGHT = { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
 
+    // Audio-clock time at which the current flash should go dark, or null when
+    // nothing is lit. Set by the queue drain below, cleared when it expires.
+    let flashOffAt = null;
+
+    // Timing of the bar the playhead is currently crossing.
+    let needleStartAt = null;
+    let needleSec     = 1;
+
     // Dim all pattern dots unconditionally — don't rely on _active flag
     // since React ref callbacks reset _active without updating DOM styles.
     function dimAllDots() {
@@ -282,12 +409,30 @@ export default function Metronome() {
       }
     }
 
-    function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
-      const isRest      = weight === 0;
-      const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
+    // Paint the three header flash dots, lighting `activeKey` and dimming the
+    // rest. Pass null to dim all of them.
+    function paintFlashDots(activeKey) {
       const isDark      = themeRef.current === 'dark';
       const mobileNow   = mobileRef.current;
       const flashColors = isDark ? FLASH_COLORS_DARK : FLASH_COLORS_LIGHT;
+      for (const key of ['measure', 'primary', 'unit']) {
+        const el = flashDotsRef.current[key];
+        if (!el) continue;
+        const active = key === activeKey;
+        const col    = flashColors[key];
+        const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
+        el.style.width      = sz;
+        el.style.height     = sz;
+        el.style.background = active ? col : col + '28';
+        el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
+        const label = el.parentElement?.nextElementSibling;
+        if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
+      }
+    }
+
+    function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
+      const isRest      = weight === 0;
+      const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
 
       // Coarse state update — re-render only when measure actually changes
       if (capM !== currentMeasureRef.current) {
@@ -299,19 +444,7 @@ export default function Metronome() {
       if (!isRest) flashRef.current = capFlash;
 
       // Header flash dots — on a rest, dim all (no flash)
-      for (const key of ['measure', 'primary', 'unit']) {
-        const el = flashDotsRef.current[key];
-        if (!el) continue;
-        const active = !isRest && lightDot && key === capFlash;
-        const col    = flashColors[key];
-        const sz     = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
-        el.style.width      = sz;
-        el.style.height     = sz;
-        el.style.background = active ? col : col + '28';
-        el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
-        const label = el.parentElement?.nextElementSibling;
-        if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
-      }
+      paintFlashDots(!isRest && lightDot ? capFlash : null);
 
       // Pattern dots — dim everything, then light capT unless it's a rest
       dimAllDots();
@@ -356,10 +489,36 @@ export default function Metronome() {
           // light a dot — lighting then immediately dimming causes a visible burst.
           // Only the last due event gets the full lit treatment.
           for (let j = 0; j < i - 1; j++) applyVisual(queue[j], false);
-          applyVisual(queue[i - 1], true);
+          const lit = queue[i - 1];
+          applyVisual(lit, true);
+          flashOffAt    = lit.weight > 0 ? lit.offAt : null;
+          needleStartAt = lit.measureStartAt;
+          needleSec     = lit.measureSec || 1;
           pendingVisualRef.current = queue.slice(i);
         }
       }
+
+      // Glide the playhead across the current bar. Driven straight from the
+      // audio clock every frame — no React state, so no re-render per beat.
+      // Frozen where it stands when stopped: we simply stop writing to it.
+      if (ctx && isPlayingRef.current && needleStartAt !== null) {
+        const el = playheadRef.current;
+        // Skip while React has yet to move the element to the current bar —
+        // its `left` and our offset would otherwise disagree for a frame.
+        if (el && el._measure === currentMeasureRef.current) {
+          const frac = Math.max(0, Math.min(1, (ctx.currentTime - needleStartAt) / needleSec));
+          el.style.transform = `translateX(${frac * (el._slotPx || 0)}px)`;
+        }
+      }
+
+      // End the flash once its off-time passes. Checked after the queue drain
+      // so a tick that lights in this same frame is not immediately dimmed.
+      if (ctx && flashOffAt !== null && ctx.currentTime >= flashOffAt) {
+        flashOffAt = null;
+        paintFlashDots(null);
+        dimAllDots();
+      }
+
       rafRef.current = requestAnimationFrame(rafLoop);
     }
 
@@ -779,7 +938,19 @@ export default function Metronome() {
             borderRadius: 3, fontSize: 12, letterSpacing: 1, flexShrink: 0,
           }}>{t.btnScore}</button>
         )}
-        <div style={{ fontSize: mobile ? 13 : 17, letterSpacing: mobile ? 2 : 4, color: C.gold, fontWeight: 'bold', flexShrink: 0 }}>{t.appTitle}</div>
+        <div
+          onClick={resetClick}
+          onPointerDown={resetPointerDown}
+          onPointerUp={resetPointerCancel}
+          onPointerLeave={resetPointerCancel}
+          onPointerCancel={resetPointerCancel}
+          title={t.tooltipReset}
+          style={{ fontSize: mobile ? 13 : 17, letterSpacing: mobile ? 2 : 4, color: C.gold, fontWeight: 'bold', flexShrink: 0,
+                   cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none',
+                   // Suppress the iOS text-selection callout that a long press
+                   // would otherwise raise on top of the confirm dialog.
+                   WebkitTouchCallout: 'none', touchAction: 'manipulation' }}
+        >{t.appTitle}</div>
         {!mobile && <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>{t.appSubtitle}</div>}
 
         {/* Desktop: flash dots (left of right controls) */}
@@ -1232,6 +1403,7 @@ export default function Metronome() {
             startMeasure={startMeasure} currentMeasure={currentMeasure}
             playing={playing}
             timelineRef={timelineRef} timelineScrollRef={timelineScrollRef}
+            playheadRef={playheadRef}
             onMouseDown={handleTimelineMouseDown}
             onTouchStart={handleTimelineTouchStart}
             onTouchMove={handleTimelineTouchMove}
