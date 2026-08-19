@@ -76,8 +76,39 @@ export default function Metronome() {
     return () => clearTimeout(id);
   }, [scoreText]);
 
+  const [scoreWidth,    setScoreWidth]    = useState(saved.scoreWidth ?? 270);
+  const [showScore,     setShowScore]     = useState(false); // mobile drawer
+
+  // ── Playback state ─────────────────────────────────────────────────────────
+  const [playing,        setPlaying]        = useState(false);
+  const [currentMeasure, setCurrentMeasure] = useState(1);
+  // currentBeat and flash drive visuals that update every tick. Bypassing React
+  // state for these avoids a full component re-render on every click — instead
+  // we mutate DOM nodes directly via refs.
+  const currentBeatRef   = useRef(0);
+  const flashRef         = useRef(null);   // 'measure' | 'primary' | 'unit' | null
+  const flashDotsRef     = useRef({});     // { measure, primary, unit } → DOM element
+  const patternDotsRef   = useRef([]);     // array of DOM elements, one per beat dot
+  const [startMeasure,   setStartMeasure]   = useState(1);
+  const [previewMeasure, setPreviewMeasure] = useState(1);
+  const [loopStart,      setLoopStart]      = useState(null);
+  const [loopEnd,        setLoopEnd]        = useState(null);
+
+  // ── Controls ───────────────────────────────────────────────────────────────
+  const [subdivIdx,      setSubdivIdx]      = useState(saved.subdivIdx ?? 1);   // 'Primary beats' — index 0 is 'Once per measure'
+  const [tempoScale,     setTempoScale]     = useState(saved.tempoScale ?? 100);
+  const [btLatency,      setBtLatency]      = useState(saved.btLatency ?? 0);
+  const [showBtSlider,   setShowBtSlider]   = useState(false);
+  const [countInEnabled,    setCountInEnabled]    = useState(saved.countInEnabled  ?? false);
+  const [countInOnRepeat,   setCountInOnRepeat]   = useState(saved.countInOnRepeat ?? false);
+  const [countInBeats,      setCountInBeats]      = useState(saved.countInBeats    ?? 4);
+  const [countInDenom,      setCountInDenom]      = useState(saved.countInDenom    ?? 4);
+
   // Persist the control settings. Debounced too, since dragging a slider
   // changes them on every pointer move.
+  // Must sit below every piece of state it names: the dependency array is
+  // evaluated during render, so declaring it earlier would read those consts
+  // in their temporal dead zone and throw before the app ever mounts.
   useEffect(() => {
     const id = setTimeout(() => saveSettings({
       theme, subdivIdx, tempoScale, btLatency,
@@ -91,8 +122,8 @@ export default function Metronome() {
   // Reset everything to factory defaults, from the ♩ in the header. Destructive
   // now that the score persists, so it asks first — window.confirm rather than
   // an in-app dialog, since the header has no room for another control.
-  // The two persist effects above write the defaults back out on the next tick,
-  // so there is nothing to clear by hand.
+  // The two persist effects write the defaults back out on the next tick, so
+  // there is nothing to clear by hand.
   // Mouse clicks reset directly; touch must press and hold, so that a stray tap
   // on the header cannot wipe a score. pointerType is recorded on every press,
   // which keeps hybrid touch-and-mouse machines working both ways.
@@ -138,33 +169,6 @@ export default function Metronome() {
     setStartMeasure(1); setPreviewMeasure(1);
     setLoopStart(null); setLoopEnd(null);
   }
-  const [scoreWidth,    setScoreWidth]    = useState(saved.scoreWidth ?? 270);
-  const [showScore,     setShowScore]     = useState(false); // mobile drawer
-
-  // ── Playback state ─────────────────────────────────────────────────────────
-  const [playing,        setPlaying]        = useState(false);
-  const [currentMeasure, setCurrentMeasure] = useState(1);
-  // currentBeat and flash drive visuals that update every tick. Bypassing React
-  // state for these avoids a full component re-render on every click — instead
-  // we mutate DOM nodes directly via refs.
-  const currentBeatRef   = useRef(0);
-  const flashRef         = useRef(null);   // 'measure' | 'primary' | 'unit' | null
-  const flashDotsRef     = useRef({});     // { measure, primary, unit } → DOM element
-  const patternDotsRef   = useRef([]);     // array of DOM elements, one per beat dot
-  const [startMeasure,   setStartMeasure]   = useState(1);
-  const [previewMeasure, setPreviewMeasure] = useState(1);
-  const [loopStart,      setLoopStart]      = useState(null);
-  const [loopEnd,        setLoopEnd]        = useState(null);
-
-  // ── Controls ───────────────────────────────────────────────────────────────
-  const [subdivIdx,      setSubdivIdx]      = useState(saved.subdivIdx ?? 1);   // 'Primary beats' — index 0 is 'Once per measure'
-  const [tempoScale,     setTempoScale]     = useState(saved.tempoScale ?? 100);
-  const [btLatency,      setBtLatency]      = useState(saved.btLatency ?? 0);
-  const [showBtSlider,   setShowBtSlider]   = useState(false);
-  const [countInEnabled,    setCountInEnabled]    = useState(saved.countInEnabled  ?? false);
-  const [countInOnRepeat,   setCountInOnRepeat]   = useState(saved.countInOnRepeat ?? false);
-  const [countInBeats,      setCountInBeats]      = useState(saved.countInBeats    ?? 4);
-  const [countInDenom,      setCountInDenom]      = useState(saved.countInDenom    ?? 4);
   const [countingIn,        setCountingIn]        = useState(false);
   const [countInRemaining,  setCountInRemaining]  = useState(0);
 

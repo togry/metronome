@@ -283,6 +283,23 @@ the ordinary way to write a piece that repeats from the top.
   headphone delay so clicks and visual flashes align with what you hear
 - **☀ / 🌙** — toggle between dark and daylight colour palettes
 
+### Saved state and reset
+
+The score and every control setting — theme, subdivision, tempo scale, BT
+offset, count-in, and the width of the score panel — are kept in the browser
+and restored on the next visit. Nothing leaves the machine; it is all
+`localStorage`, per browser and per device.
+
+The score is saved as you type, not only when you press PARSE, so an
+accidental reload cannot lose work that does not parse yet. Clearing the
+editor and reloading brings the default score back rather than an empty box.
+
+To start over, use the **♩ METRONOMICON** title in the header: click it on a
+desktop, or press and hold it for about a second on a touchscreen. It asks for
+confirmation, then returns the score and all settings to their defaults. The
+interface language is not affected — that has its own control and its own
+saved setting.
+
 ### Click sounds
 
 | Colour | Meaning |
@@ -367,6 +384,7 @@ src/
   beatModel.js       beat patterns, tempo math (pure functions)
   timeline.js        timeline event list, loop seq bounds
   constants.js       palettes, subdivision options, example scores
+  storage.js         score and settings persistence (localStorage)
   Metronome.jsx      top-level component: all state, scheduler, layout
   main.jsx           React entry point
   components/
@@ -413,6 +431,18 @@ BPM, target BPM, and a total length in denominator units; each tick
 interpolates its own duration from its offset into the span, so the tempo
 moves smoothly within a bar rather than stepping at barlines.
 
+**Persistence degrades quietly.** `storage.js` guards every `localStorage`
+access, including the lookup of the global itself — reading it throws when
+site data is blocked, and writing throws on a full quota. A failed save is
+never worth an exception, so the app runs unchanged when persistence is
+unavailable. Settings are one JSON blob and `loadSettings()` always returns an
+object, so each caller falls back per key: a blob written before a setting
+existed still restores every other setting. Callers use `??` rather than `||`,
+since `false` and `0` are meaningful values for the count-in and BT offset.
+The initial parse of a restored score is wrapped in try/catch — a score saved
+under a syntax that later changes must not be able to take the app down on
+boot, leaving no way to reach the editor and fix it.
+
 ### Localization
 
 UI strings live in `src/i18n/`, currently English and Norwegian. `t` is a
@@ -443,7 +473,8 @@ Runs the test suite (`test/*.test.js`) on Node's built-in test runner —
 no dependencies, no config. It covers the score language: barlines and
 repeat expansion, D.C./D.S. al Fine/Coda, groupings and their inheritance,
 tuplet slots, tempo, rit/accel spans, and every warning case. It also checks
-the beat patterns each subdivision setting produces, and that every locale
-carries a label for every control option. What it exercises is `parser.js`,
-`beatModel.js`, and the option tables — all pure; the React layer and the
-scheduler are not covered.
+the beat patterns each subdivision setting produces, that every locale carries
+a label for every control option, and that persistence round-trips — including
+the cases where `localStorage` is absent or throws. What it exercises is
+`parser.js`, `beatModel.js`, `storage.js`, and the option tables — all pure;
+the React layer and the scheduler are not covered.
