@@ -39,6 +39,7 @@ const en = {
     'Subdivided to 32nds',
   ],
   labelTempo:      'TEMPO',
+  tooltipTempoReset: 'Back to written tempo (100%)',
   labelBpm:        'bpm',
   labelBt:         'BT',
 
@@ -219,6 +220,7 @@ const en = {
       '  4ths / 8ths / 16ths / 32nds.',
       '  Sub-clicks are added only where a beat divides evenly.',
       'TEMPO slider  10–150% of written tempo.',
+      '  Tap the percentage to go back to 100%.',
       '☀ / 🌙  Toggle between dark and daylight palettes.',
       '',
       'The score and all settings are kept between visits.',

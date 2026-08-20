@@ -278,7 +278,10 @@ the ordinary way to write a piece that repeats from the top.
   - *Primary beats* — one click per beat group (the default)
   - *Subdivided to 4ths / 8ths / 16ths / 32nds* — sub-clicks added only where
     the beat divides evenly
-- **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider
+- **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider.
+  Tap the percentage to return to 100%. On a touchscreen the slider moves in
+  5% steps rather than 1%, which is the difference between 29 positions on the
+  track and 141
 - **BT** — Bluetooth latency offset (0–500 ms); compensates for wireless
   headphone delay so clicks and visual flashes align with what you hear
 - **☀ / 🌙** — toggle between dark and daylight colour palettes

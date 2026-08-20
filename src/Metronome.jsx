@@ -1226,16 +1226,29 @@ export default function Metronome() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: mobile ? 1 : 'unset' }}>
               <label style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>
                 {t.labelTempo} &nbsp;
-                <span style={{ color: C.gold, fontSize: 11 }}>{tempoScale}%</span>
+                {/* Tapping the percentage snaps back to written tempo — an
+                    escape hatch that costs no screen space. */}
+                <span
+                  onClick={() => setTempoScale(100)}
+                  title={t.tooltipTempoReset}
+                  style={{ color: C.gold, fontSize: 11, cursor: 'pointer', userSelect: 'none',
+                           WebkitTouchCallout: 'none', touchAction: 'manipulation',
+                           textDecoration: tempoScale === 100 ? 'none' : 'underline dotted' }}
+                >{tempoScale}%</span>
                 {previewMs && (
                   <span style={{ color: C.textDim, fontSize: 10 }}>
                     &nbsp;= {Math.round(previewMs.tempoBPM * tempoScale / 100)} {t.labelBpm}
                   </span>
                 )}
               </label>
-              <input type="range" min={10} max={150} step={1} value={tempoScale}
+              {/* Coarser steps on a touchscreen: 1% steps put 141 positions on a
+                  ~240px track, which no fingertip can resolve. 5% gives 29.
+                  touchAction 'none' claims the drag so a diagonal swipe is not
+                  handed to the page scroller mid-adjustment. */}
+              <input type="range" min={10} max={150} step={mobile ? 5 : 1} value={tempoScale}
                 onChange={e => setTempoScale(parseInt(e.target.value))}
-                style={{ width: mobile ? '100%' : 160, accentColor: C.gold, cursor: 'pointer' }}
+                style={{ width: mobile ? '100%' : 160, accentColor: C.gold, cursor: 'pointer',
+                         touchAction: 'none' }}
               />
             </div>
 

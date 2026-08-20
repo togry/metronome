@@ -40,6 +40,7 @@ const no = {
     '32-deler',
   ],
   labelTempo:      'TEMPO',
+  tooltipTempoReset: 'Tilbake til angitt tempo (100 %)',
   labelBpm:        'slag/min',
   labelBt:         'BT',
 
@@ -217,6 +218,7 @@ const no = {
       '  4-deler / 8-deler / 16-deler / 32-deler.',
       '  Underklikk legges bare til der et slag kan deles likt.',
       'TEMPO velg fra 10% til 150 % av angitt tempo.',
+      '  Trykk på prosenten for å gå tilbake til 100 %.',
       '☀ / 🌙  Veksle mellom mørkt og lyst tema.',
       '',
       'Partituret og alle innstillinger huskes til neste gang.',
