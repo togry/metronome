@@ -12,18 +12,37 @@ export const SUBDIV_OPTIONS = [
 ];
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
+//
+// Dark-theme contrast, measured against bgMid (#111120, the lightest of the
+// three dark backgrounds, so the worst case):
+//
+//   text       15.0     — primary
+//   textDim    10.5     — secondary, 10-11px
+//   textFaint   8.0     — smallest labels, 8-9px
+//   borderHi    2.6     — divider, hover edge
+//   border      1.8     — panel separators
+//
+// The text ramp deliberately exceeds WCAG AA. AA's 4.5:1 assumes 18.66px text,
+// and these labels render at 8–11px in letterspaced uppercase, which reads far
+// fainter than the ratio alone suggests. The separators stay well below the
+// 3:1 non-text guideline on purpose: they only need to delineate panels, and
+// brightening them would have them competing with the text for attention.
+// Keep that ordering if you touch these — the ramp *is* the hierarchy.
+//
+// `sub` (6.0 here) is a mark colour for subdivision dots, not part of the text
+// ramp, so it is free to sit anywhere in the ordering.
 
 export const PALETTES = {
   dark: {
     bg:        '#0d0d16',
     bgMid:     '#111120',
     bgDark:    '#080810',
-    border:    '#252540',
-    borderHi:  '#3a3a60',
+    border:    '#3c3c67',
+    borderHi:  '#525288',
     measure:   '#ff3333',
     primary:   '#ffaa00',
     unit:      '#00ccff',
-    sub:       '#8888bb',
+    sub:       '#8e8ebe',
     gold:      '#f0c040',
     green:     '#44ee88',
     greenDim:  '#1a3328',
@@ -31,8 +50,8 @@ export const PALETTES = {
     redDim:    '#2a0e0e',
     orange:    '#ee9900',
     text:      '#e8e4f8',
-    textDim:   '#9090c0',
-    textFaint: '#7a7aaa',
+    textDim:   '#c0c0db',
+    textFaint: '#a7a7c7',
     code:      '#00cc88',
     reh:       '#88aaff',
   },

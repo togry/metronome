@@ -426,7 +426,10 @@ export default function Metronome() {
         el.style.background = active ? col : col + '28';
         el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
         const label = el.parentElement?.nextElementSibling;
-        if (label) label.style.color = active ? col : (isDark ? '#7a7aaa' : '#5a4e38');
+        // Inactive label falls back to textFaint. Hardcoded rather than read
+        // from C, because this runs inside the rAF effect, which closes over
+        // nothing that changes — keep in step with PALETTES.*.textFaint.
+        if (label) label.style.color = active ? col : (isDark ? '#a7a7c7' : '#5a4e38');
       }
     }
 
