@@ -2,25 +2,30 @@
 
 // targetDenom: -1 = one click per measure; 0 = primary beats only;
 // 4/8/16/32 = subdivide to that note value.
+// The labels here are only a fallback for a locale that has no subdivOptions
+// entry — the UI reads t.subdivOptions[i] first. Keep them in step.
 export const SUBDIV_OPTIONS = [
-  { label: 'Once per measure',   targetDenom: -1 },
-  { label: 'Primary beats',      targetDenom: 0  },
-  { label: 'Subdivided to 4ths', targetDenom: 4  },
-  { label: 'Subdivided to 8ths', targetDenom: 8  },
-  { label: 'Subdivided to 16ths',targetDenom: 16 },
-  { label: 'Subdivided to 32nds',targetDenom: 32 },
+  { label: 'Per measure',   targetDenom: -1 },
+  { label: 'Primary beats', targetDenom: 0  },
+  { label: 'Div to 4ths',   targetDenom: 4  },
+  { label: 'Div to 8ths',   targetDenom: 8  },
+  { label: 'Div to 16ths',  targetDenom: 16 },
+  { label: 'Div to 32nds',  targetDenom: 32 },
 ];
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
 //
-// Dark-theme contrast, measured against bgMid (#111120, the lightest of the
-// three dark backgrounds, so the worst case):
+// Contrast is measured against each theme's worst-case background: bgMid
+// (#111120) for the dark theme, since light ink loses contrast as the ground
+// lightens, and bgDark (#ddd6c4) for the light theme, where dark ink loses it
+// as the ground darkens. Same numbers, opposite ends.
 //
-//   text       15.0     — primary
-//   textDim    10.5     — secondary, 10-11px
-//   textFaint   8.0     — smallest labels, 8-9px
-//   borderHi    2.6     — divider, hover edge
-//   border      1.8     — panel separators
+//                    dark   light
+//   text             15.0    12.6   — primary
+//   textDim          10.5     8.4   — secondary, 10-11px
+//   textFaint         8.0     8.0   — smallest labels, 8-9px
+//   borderHi          2.6     2.8   — divider, hover edge
+//   border            1.8     1.8   — panel separators
 //
 // The text ramp deliberately exceeds WCAG AA. AA's 4.5:1 assumes 18.66px text,
 // and these labels render at 8–11px in letterspaced uppercase, which reads far
@@ -59,7 +64,7 @@ export const PALETTES = {
     bg:        '#f5f0e8',
     bgMid:     '#ece6d8',
     bgDark:    '#ddd6c4',
-    border:    '#b0a890',
+    border:    '#a8a085',
     borderHi:  '#8a7e6a',
     measure:   '#b80e0e',
     primary:   '#7a3e00',
@@ -73,7 +78,7 @@ export const PALETTES = {
     orange:    '#b85000',
     text:      '#1a1408',
     textDim:   '#3e3428',
-    textFaint: '#5a4e38',
+    textFaint: '#403828',
     code:      '#004d2a',
     reh:       '#1a3a8a',
   },

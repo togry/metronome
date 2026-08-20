@@ -429,7 +429,7 @@ export default function Metronome() {
         // Inactive label falls back to textFaint. Hardcoded rather than read
         // from C, because this runs inside the rAF effect, which closes over
         // nothing that changes — keep in step with PALETTES.*.textFaint.
-        if (label) label.style.color = active ? col : (isDark ? '#a7a7c7' : '#5a4e38');
+        if (label) label.style.color = active ? col : (isDark ? '#a7a7c7' : '#403828');
       }
     }
 

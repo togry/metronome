@@ -273,10 +273,10 @@ the ordinary way to write a piece that repeats from the top.
   or 4 beats of quarters or eighths. Tick **ON REPEAT** to also insert a
   count-in each time a loop region or looping score wraps around.
 - **SUBDIVIDE** — how much to click:
-  - *Once per measure* — a single downbeat per bar, for conducting long or
+  - *Per measure* — a single downbeat per bar, for conducting long or
     fast passages by the measure rather than the beat
   - *Primary beats* — one click per beat group (the default)
-  - *Subdivided to 4ths / 8ths / 16ths / 32nds* — sub-clicks added only where
+  - *Div to 4ths / 8ths / 16ths / 32nds* — sub-clicks added only where
     the beat divides evenly
 - **TEMPO** slider — 10–150% of written tempo; actual BPM shown next to slider.
   Tap the percentage to return to 100%. On a touchscreen the slider moves in

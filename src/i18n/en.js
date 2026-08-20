@@ -30,13 +30,15 @@ const en = {
 
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'SUBDIVIDE',
+  // Kept short — these set the width of the dropdown, in the most crowded
+  // row of the layout.
   subdivOptions: [
-    'Once per measure',
+    'Per measure',
     'Primary beats',
-    'Subdivided to 4ths',
-    'Subdivided to 8ths',
-    'Subdivided to 16ths',
-    'Subdivided to 32nds',
+    'Div to 4ths',
+    'Div to 8ths',
+    'Div to 16ths',
+    'Div to 32nds',
   ],
   labelTempo:      'TEMPO',
   tooltipTempoReset: 'Back to written tempo (100%)',

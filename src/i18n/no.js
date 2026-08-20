@@ -32,7 +32,7 @@ const no = {
   // ── Controls row 2 ──────────────────────────────────────────────────────────
   labelSubdivide:  'UNDERDELING',
   subdivOptions: [
-    'Én gang per takt',
+    'Per takt',
     'Bare pulsslag',
     '4-deler',
     '8-deler',
