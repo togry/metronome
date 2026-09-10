@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 import { parseScore }                   from './parser.js';
 import { getBeatPattern, getPrimaryGroups, groupingShortLabel, groupingFullLabel, oneDenomUnitSec, tickDurationSec } from './beatModel.js';
-import { getTimelineEvents, computeLoopSeqBounds } from './timeline.js';
+import { getTimelineEvents, computeLoopSeqBounds, timelineGeometry } from './timeline.js';
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
 import { getDefaultScore, getRitExampleScore, getTupletExampleScore, getStructureExampleScore } from './constants.js';
 import { useLocale, LOCALES } from './i18n/useLocale.js';
@@ -775,14 +775,8 @@ export default function Metronome() {
         if (i === children.length - 1) lineIdx = i;
       }
     }
-    const containerWidth = scrollEl.clientWidth;
-    const MIN_PX         = mobile ? 22 : 26;
-    const naturalPx      = containerWidth / Math.max(1, totalMeasures);
-    const slotPx         = Math.max(MIN_PX, naturalPx);
-    const measPerLine    = Math.max(1, Math.floor(containerWidth / slotPx));
-    const filledSlotPx   = containerWidth / measPerLine;
-    const lineStart = lineIdx * measPerLine + 1;
-    return Math.max(1, Math.min(totalMeasures, lineStart + Math.floor(relX / filledSlotPx)));
+    // Same geometry the strip is drawn with — see timelineGeometry().
+    return timelineGeometry(scrollEl.clientWidth, totalMeasures, mobile).measureAt(lineIdx, relX);
   }
 
   // ── Timeline event handlers ────────────────────────────────────────────────

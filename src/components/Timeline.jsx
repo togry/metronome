@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { groupingShortLabel } from '../beatModel.js';
+import { timelineGeometry } from '../timeline.js';
 
 export default function Timeline({
   C, mobile, t,
@@ -47,28 +48,14 @@ export default function Timeline({
     return () => ro.disconnect();
   }, [timelineScrollRef]);
 
-  const rawWidth = measuredWidth
-    || timelineScrollRef.current?.clientWidth
-    || (typeof window !== 'undefined' ? window.innerWidth - (mobile ? 24 : 80) : 600);
-  const containerWidth = rawWidth - 2;   // -2 for border
-
-  const MIN_PX      = mobile ? 22 : 26;
-  const naturalPx   = containerWidth / Math.max(1, totalMeasures);
-  const slotPx      = Math.max(MIN_PX, naturalPx);
-  const measPerLine = Math.max(1, Math.floor(containerWidth / slotPx));
-  // Stretch slots to fill line exactly
-  const filledSlotPx = containerWidth / measPerLine;
-
-  const lineCount = Math.ceil(totalMeasures / measPerLine);
-  const lines     = Array.from({ length: lineCount }, (_, li) => ({
-    start: li * measPerLine + 1,
-    end:   Math.min((li + 1) * measPerLine, totalMeasures),
-  }));
-
-  // x position of measure mn within its line
-  function xInLine(mn, lineStart) {
-    return Math.round((mn - lineStart) * filledSlotPx);
-  }
+  // Guessing the width was the bug: on desktop the strip is narrower than the
+  // window by the score sidebar, so the guess overflowed the container until
+  // something forced a re-render. There is no good guess — so don't. Below,
+  // the lines are simply not drawn until a real measurement exists, and the
+  // measurement is taken in a layout effect, before paint, so nothing is seen
+  // in the meantime.
+  const geom = measuredWidth ? timelineGeometry(measuredWidth, totalMeasures, mobile) : null;
+  const { filledSlotPx = 0, measPerLine = 1, lines = [], xInLine = () => 0 } = geom || {};
 
   // ── Auto-scroll active line into view ───────────────────────────────────────
   useEffect(() => {

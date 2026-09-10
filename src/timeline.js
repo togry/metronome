@@ -65,3 +65,36 @@ export function computeLoopSeqBounds(seq, loopStartMn, loopEndMn) {
   }
   return { s, e };
 }
+
+// ─── Timeline wrapping geometry ───────────────────────────────────────────────
+//
+// The single source of truth for how the strip wraps. Both the drawing
+// (Timeline.jsx) and the hit-testing (measureFromXY in Metronome.jsx) must
+// agree exactly — when they drifted apart by the 2px border, clicks near the
+// end of a line resolved to the wrong measure.
+//
+// `clientWidth` is the raw scroll-container width; the border is subtracted
+// here so no caller has to remember to.
+export function timelineGeometry(clientWidth, totalMeasures, mobile) {
+  const width       = Math.max(1, clientWidth - 2);
+  const MIN_PX      = mobile ? 22 : 26;
+  const naturalPx   = width / Math.max(1, totalMeasures);
+  const slotPx      = Math.max(MIN_PX, naturalPx);
+  const measPerLine = Math.max(1, Math.floor(width / slotPx));
+  const filledSlotPx = width / measPerLine;
+  const lineCount   = Math.ceil(Math.max(1, totalMeasures) / measPerLine);
+  const lines       = Array.from({ length: lineCount }, (_, li) => ({
+    start: li * measPerLine + 1,
+    end:   Math.min((li + 1) * measPerLine, totalMeasures),
+  }));
+  return {
+    width, slotPx, measPerLine, filledSlotPx, lineCount, lines,
+    // x of measure `mn` within the line starting at `lineStart`
+    xInLine: (mn, lineStart) => Math.round((mn - lineStart) * filledSlotPx),
+    // which measure sits at offset `relX` on the line with index `lineIdx`
+    measureAt: (lineIdx, relX) => {
+      const lineStart = lineIdx * measPerLine + 1;
+      return Math.max(1, Math.min(totalMeasures, lineStart + Math.floor(relX / filledSlotPx)));
+    },
+  };
+}
