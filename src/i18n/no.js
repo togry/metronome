@@ -41,6 +41,7 @@ const no = {
   ],
   labelTempo:      'TEMPO',
   tooltipTempoReset: 'Tilbake til angitt tempo (100 %)',
+  tooltipTempoCurve: 'Tempoet endrer seg — tallet er angitt tempo, ikke det som spilles',
   labelBpm:        'slag/min',
   labelBt:         'BT',
   labelBtAuto:     'auto',

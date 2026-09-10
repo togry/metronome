@@ -42,7 +42,7 @@ export default function ScorePanel({
       />
 
       {parseError && (
-        <div style={{ color: '#ff6666', fontSize: 11 }}>{parseError}</div>
+        <div style={{ color: C.red, fontSize: 11 }}>{parseError}</div>
       )}
       {parseWarnings.map((w, i) => (
         <div key={i} style={{ color: C.primary, fontSize: 11 }}>⚠ {w}</div>
@@ -50,7 +50,7 @@ export default function ScorePanel({
 
       <div style={{ display: 'flex', gap: 6 }}>
         <button onClick={() => setScoreText('')} style={{
-          background: C.redDim, border: '1px solid #442222', color: '#cc6666',
+          background: C.redDim, border: `1px solid ${C.red}44`, color: C.red,
           padding: mobile ? '12px' : '7px 10px', cursor: 'pointer', borderRadius: 3,
           letterSpacing: 2, fontSize: mobile ? 14 : 11, fontFamily: 'monospace',
         }}>CLEAR</button>
@@ -61,7 +61,7 @@ export default function ScorePanel({
           flexShrink: 0,
         }}>📋▶</button>
         <button onClick={onParse} style={{
-          flex: 1, background: C.greenDim, border: '1px solid #336644', color: C.green,
+          flex: 1, background: C.greenDim, border: `1px solid ${C.green}44`, color: C.green,
           padding: mobile ? '12px' : '7px 12px', cursor: 'pointer', borderRadius: 3,
           letterSpacing: 2, fontSize: mobile ? 14 : 11, fontFamily: 'monospace',
         }}>PARSE</button>

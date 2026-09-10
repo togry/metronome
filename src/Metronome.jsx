@@ -1241,8 +1241,11 @@ export default function Metronome() {
             <div style={{
               display: 'flex', flexDirection: 'column', gap: 4,
               padding: '5px 8px',
-              background: countInEnabled ? '#0a1a0a' : 'transparent',
-              border: `1px solid ${countInEnabled ? '#336633' : C.border}`,
+              // Theme tokens, not fixed hexes: the old '#0a1a0a' stayed
+              // near-black in the daylight palette. greenDim + a translucent
+              // green edge is the same pairing HelpModal uses.
+              background: countInEnabled ? C.greenDim : 'transparent',
+              border: `1px solid ${countInEnabled ? `${C.green}44` : C.border}`,
               borderRadius: 4, flexShrink: 0, overflow: 'visible',
             }}>
               {/* Header row: checkbox + label + beat selects always in one line */}
@@ -1330,6 +1333,16 @@ export default function Metronome() {
                 {previewMs && (
                   <span style={{ color: C.textDim, fontSize: 10 }}>
                     &nbsp;= {Math.round(previewMs.tempoBPM * tempoScale / 100)} {t.labelBpm}
+                  </span>
+                )}
+                {/* Inside a rit/accel the figure above is the written tempo, not
+                    the one being played — it can be out by a factor of two by
+                    the end of a long curve. The arrow says so without claiming
+                    a number the readout would have to update every beat. */}
+                {previewMs?.ritAccelSpan && (
+                  <span title={t.tooltipTempoCurve}
+                        style={{ color: C.primary, fontSize: 10 }}>
+                    &nbsp;{previewMs.ritAccelSpan.kind === 'rit' ? '↘' : '↗'}
                   </span>
                 )}
               </label>
@@ -1496,7 +1509,7 @@ export default function Metronome() {
                   />
                 </div>
                 <button onClick={() => { setLoopStart(null); setLoopEnd(null); }} style={{
-                  background: C.redDim, border: '1px solid #442222', color: '#cc6666',
+                  background: C.redDim, border: `1px solid ${C.red}44`, color: C.red,
                   padding: mobile ? '8px 12px' : '4px 10px',
                   cursor: 'pointer', borderRadius: 3, fontSize: 11, letterSpacing: 1,
                   fontFamily: 'monospace', marginTop: mobile ? 0 : 14,

@@ -42,6 +42,7 @@ const en = {
   ],
   labelTempo:      'TEMPO',
   tooltipTempoReset: 'Back to written tempo (100%)',
+  tooltipTempoCurve: 'Tempo is changing — the figure is the written tempo, not the one playing',
   labelBpm:        'bpm',
   labelBt:         'BT',
   labelBtAuto:     'auto',
