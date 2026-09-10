@@ -483,6 +483,21 @@ export default function Metronome() {
         return;
       }
 
+      // Count-in beat: header dots only. There is no bar in progress, so no
+      // pattern dot to light and no needle timing to adopt.
+      if (ev.countIn) {
+        if (ev.end) {
+          setCountingIn(false);
+          setCountInRemaining(0);
+        } else {
+          setCountingIn(true);
+          setCountInRemaining(ev.remaining);
+          flashRef.current = ev.flash;
+          paintFlashDots(lightDot ? ev.flash : null);
+        }
+        return;
+      }
+
       const { measure: capM, beat: capT, weight } = ev;
       const isRest      = weight === 0;
       const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
@@ -572,7 +587,9 @@ export default function Metronome() {
           for (let j = 0; j < i - 1; j++) applyVisual(queue[j], false);
           const lit = queue[i - 1];
           applyVisual(lit, true);
-          if (!lit.park) {
+          if (lit.countIn) {
+            if (!lit.end) flashOffAt = lit.offAt;
+          } else if (!lit.park) {
             flashOffAt    = lit.weight > 0 ? lit.offAt : null;
             needleRef.current = { startAt: lit.measureStartAt, sec: lit.measureSec || 1 };
           }
@@ -652,36 +669,27 @@ export default function Metronome() {
       g.gain.setValueAtTime(i === 0 ? 0.7 : 0.5, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       osc.start(t); osc.stop(t + 0.06);
-      const capRemaining = ciBeats - i;
-      setTimeout(() => {
-        setCountingIn(true);
-        setCountInRemaining(capRemaining);
-        const capFlash = i === 0 ? 'measure' : 'primary';
-        flashRef.current = capFlash;
-        const isDark = themeRef.current === 'dark';
-        const flashColors = isDark
-          ? { measure: '#ff3333', primary: '#ffaa00', unit: '#00ccff' }
-          : { measure: '#b80e0e', primary: '#7a3e00', unit: '#003d66' };
-        const mobileNow = mobileRef.current;
-        for (const key of ['measure', 'primary', 'unit']) {
-          const el = flashDotsRef.current[key];
-          if (!el) continue;
-          const active = key === capFlash;
-          const col = flashColors[key];
-          const sz = active ? (mobileNow ? '20px' : '22px') : (mobileNow ? '11px' : '13px');
-          el.style.width      = sz;
-          el.style.height     = sz;
-          el.style.background = active ? col : col + '28';
-          el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
-        }
-      }, Math.max(0, (t + btLatencyRef.current - ctx.currentTime) * 1000));
+      // Queued rather than painted from a timer, so a count-in beat gets the
+      // same off-time as a playback beat and reads as a flash rather than
+      // staying lit until the next one replaces it.
+      if (!pendingVisualRef.current) pendingVisualRef.current = [];
+      pendingVisualRef.current.push({
+        countIn:   true,
+        flash:     i === 0 ? 'measure' : 'primary',
+        remaining: ciBeats - i,
+        fireAt:    t + btLatencyRef.current,
+        offAt:     t + btLatencyRef.current + Math.min(FLASH_MAX_SEC, oneBeatSec),
+      });
     }
 
     const resumeAt = startT + ciBeats * oneBeatSec;
-    setTimeout(() => {
-      setCountingIn(false);
-      setCountInRemaining(0);
-    }, Math.max(0, (resumeAt + btLatencyRef.current - ctx.currentTime) * 1000));
+    // Ends the count-in readout. Deliberately paints nothing: it lands at the
+    // same instant as the first playback beat, and the last count-in flash is
+    // already ending on its own offAt.
+    pendingVisualRef.current.push({
+      countIn: true, end: true,
+      fireAt:  resumeAt + btLatencyRef.current,
+    });
 
     return resumeAt;
   }, []);
