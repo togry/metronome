@@ -465,7 +465,21 @@ export default function Metronome() {
       }
     }
 
-    function applyVisual({ measure: capM, beat: capT, weight }, lightDot) {
+    function applyVisual(ev, lightDot) {
+      // Boundary marker: park on a bar that has not started sounding yet.
+      // No flash of its own — the count-in draws its own beats.
+      if (ev.park) {
+        if (ev.measure !== currentMeasureRef.current) {
+          currentMeasureRef.current = ev.measure;
+          setCurrentMeasure(ev.measure);
+        }
+        needleRef.current = { startAt: null, sec: 1 };
+        paintFlashDots(null);
+        dimAllDots();
+        return;
+      }
+
+      const { measure: capM, beat: capT, weight } = ev;
       const isRest      = weight === 0;
       const capFlash    = weight >= 3 ? 'measure' : weight >= 2 ? 'primary' : 'unit';
 
@@ -521,7 +535,17 @@ export default function Metronome() {
         if (ctx.currentTime >= resumeAt - 0.05) {
           pendingRestartRef.current = null;
           posRef.current = { seqIdx, tick: 0 };
-          needleRef.current = { startAt: null, sec: 1 };
+          // Do NOT move the needle yet. The audio of the old bar has finished,
+          // but its visuals are still queued — they run BT behind the sound.
+          // Queue a marker at the moment the display reaches the boundary, so
+          // the needle parks on the restart bar exactly as the count-in
+          // becomes visible, and the old bar's last flashes still play out.
+          if (!pendingVisualRef.current) pendingVisualRef.current = [];
+          pendingVisualRef.current.push({
+            park:    true,
+            measure: parsedRef.current.seq[seqIdx] ?? 1,
+            fireAt:  resumeAt + btLatencyRef.current,
+          });
           const ciResumeAt = scheduleCountIn(ctx, resumeAt, seqIdx);
           nextTickTimeRef.current = ciResumeAt;
           isPlayingRef.current = true;
@@ -544,8 +568,12 @@ export default function Metronome() {
           for (let j = 0; j < i - 1; j++) applyVisual(queue[j], false);
           const lit = queue[i - 1];
           applyVisual(lit, true);
-          flashOffAt    = lit.weight > 0 ? lit.offAt : null;
-          needleRef.current = { startAt: lit.measureStartAt, sec: lit.measureSec || 1 };
+          if (lit.park) {
+            flashOffAt = null;
+          } else {
+            flashOffAt    = lit.weight > 0 ? lit.offAt : null;
+            needleRef.current = { startAt: lit.measureStartAt, sec: lit.measureSec || 1 };
+          }
           pendingVisualRef.current = queue.slice(i);
         }
       }
@@ -669,6 +697,7 @@ export default function Metronome() {
     setPreviewMeasure(seq[startIdx] ?? realStart);
     setPlayheadVisible(true);
     needleRef.current = { startAt: null, sec: 1 };
+    pendingVisualRef.current = [];
     currentBeatRef.current = 0;
     flashRef.current = null;
     pendingRestartRef.current = null;
