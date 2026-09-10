@@ -42,6 +42,7 @@ const no = {
   labelTempo:      'TEMPO',
   tooltipTempoReset: 'Tilbake til angitt tempo (100 %)',
   tooltipTempoCurve: 'Tempoet endrer seg — tallet er angitt tempo, ikke det som spilles',
+  errClipboard:    'Kunne ikke lese utklippstavlen — lim inn manuelt og trykk PARSE',
   labelBpm:        'slag/min',
   labelBt:         'BT',
   labelBtAuto:     'auto',
@@ -108,6 +109,8 @@ const no = {
 36||                  # slutt på stykke`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
+  errTooManyMeasures: (mn, max) =>
+    `t.${mn}: taktnummeret overstiger grensen på ${max} — se etter en skrivefeil`,
   warnGroupingInvalid: (mn) =>
     `t.${mn}: ugyldig gruppering — sifrene i en tuplett må summere til div; gruppering ignorert`,
   warnGroupingNotDivisible: (mn, units, num, den) =>

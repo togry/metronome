@@ -43,6 +43,7 @@ const en = {
   labelTempo:      'TEMPO',
   tooltipTempoReset: 'Back to written tempo (100%)',
   tooltipTempoCurve: 'Tempo is changing — the figure is the written tempo, not the one playing',
+  errClipboard:    'Clipboard read failed — paste manually and click PARSE',
   labelBpm:        'bpm',
   labelBt:         'BT',
   labelBtAuto:     'auto',
@@ -112,6 +113,8 @@ const en = {
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   // These are parameterised; keep the function signatures intact.
+  errTooManyMeasures: (mn, max) =>
+    `m.${mn}: measure number exceeds the limit of ${max} — check for a typo`,
   warnGroupingInvalid: (mn) =>
     `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`,
   warnGroupingNotDivisible: (mn, units, num, den) =>

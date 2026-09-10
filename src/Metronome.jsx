@@ -749,7 +749,7 @@ export default function Metronome() {
         if (mobile) setShowScore(false);
       } catch (e) { setParseError(e.message); }
     } catch {
-      setParseError("Clipboard read failed — paste manually and click PARSE");
+      setParseError(t.errClipboard);
     }
   }
 

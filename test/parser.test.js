@@ -539,3 +539,105 @@ describe('the documented example scores', () => {
     assert.deepEqual(warnings, []);
   });
 });
+
+describe('ignored text', () => {
+  const NL = String.fromCharCode(10);
+
+  test('a line that is not a score line is reported whole', () => {
+    const { ignored } = parse(['1| 4/4 1/4=90', 'this is not a score line', '4||'].join(NL));
+    assert.deepEqual(ignored, [{ line: 1, text: 'this is not a score line' }]);
+  });
+
+  test('trailing junk on a good line is reported, the line still parses', () => {
+    const { ignored, measures } = parse('1| 4/4 1/4=90 wibble');
+    assert.deepEqual(ignored, [{ line: 0, text: 'wibble' }]);
+    assert.equal(measures[1].numerator, 4);
+    assert.equal(measures[1].tempoBPM, 90);
+  });
+
+  test('junk after a rit target is reported', () => {
+    const { ignored, measures } = parse(['1| 4/4 1/4=160', '3| rit 1/4=60 junk', '7| 1/4=60'].join(NL));
+    assert.deepEqual(ignored, [{ line: 1, text: 'junk' }]);
+    assert.equal(measures[3].ritAccelSpan.targetBPM, 60);
+  });
+
+  test('commas and semicolons are decoration, not leftovers', () => {
+    assert.deepEqual(parse('1| 4/4, 1/4=90').ignored, []);
+    assert.deepEqual(parse('1|: 4/4; 1/4=90').ignored, []);
+  });
+
+  test('comments and blank lines are not leftovers', () => {
+    const src = ['# heading', '', '1| 4/4 1/4=90   # trailing note', '// aside', '4||'].join(NL);
+    assert.deepEqual(parse(src).ignored, []);
+  });
+
+  test('line numbers refer to the original text, blanks included', () => {
+    const src = ['', '# note', '', 'garbage here', '1| 4/4'].join(NL);
+    assert.deepEqual(parse(src).ignored, [{ line: 3, text: 'garbage here' }]);
+  });
+
+  test('a clean score reports nothing', () => {
+    const src = ['1|: 4/4 1/4=90', '8:| [A]', '9|: $ 7/8 (223)', '16:|| [B]', '17| DS al Fine', '20||'].join(NL);
+    assert.deepEqual(parse(src).ignored, []);
+  });
+});
+
+describe('measure-number cap', () => {
+  test('a plausible piece is fine', () => {
+    assert.equal(parse('1| 4/4 1/4=120\n2000||').endAt, 2000);
+  });
+
+  test('a mistyped measure number throws rather than hanging', () => {
+    // The forward pass walks every measure from 1, so 10 million bars is
+    // ~2GB and a frozen tab. This is the one input that must be refused.
+    assert.throws(() => parse('1| 4/4 1/4=120\n10000000||'), /exceeds the limit/);
+  });
+
+  test('the limit itself is allowed', () => {
+    assert.equal(parse('1| 4/4 1/4=120\n10000||').endAt, 10000);
+  });
+});
+
+describe('ignored text on both sides of a field', () => {
+  const NL = String.fromCharCode(10);
+
+  test('junk before and after a grouping are reported separately', () => {
+    // Both must be separate entries: the editor locates each fragment in the
+    // source line, and a single joined string would match nowhere.
+    const { ignored, measures } = parse('9| 7/8 2 3 4 5 abc (223) wibble');
+    assert.deepEqual(ignored, [
+      { line: 0, text: '2 3 4 5 abc' },
+      { line: 0, text: 'wibble' },
+    ]);
+    assert.equal(measures[9].numerator, 7);
+    assert.deepEqual(measures[9].grouping, [2, 2, 3]);
+  });
+
+  test('junk before a time signature is reported', () => {
+    const { ignored, measures } = parse('3| oops 5/4');
+    assert.deepEqual(ignored, [{ line: 0, text: 'oops' }]);
+    assert.equal(measures[3].numerator, 5);
+  });
+
+  test('fragments come back in source order, one per gap between fields', () => {
+    // Not ['aaa','bbb','ccc ddd'] — 'ccc' and 'ddd' are separated by the tempo
+    // in the source, so joining them would name text that appears nowhere.
+    const { ignored, measures } = parse('1| aaa 4/4 bbb (22) ccc 1/4=90 ddd');
+    assert.deepEqual(ignored.map(i => i.text), ['aaa', 'bbb', 'ccc', 'ddd']);
+    assert.equal(measures[1].numerator, 4);
+    assert.deepEqual(measures[1].grouping, [2, 2]);
+    assert.equal(measures[1].tempoBPM, 90);
+  });
+
+  test('a fragment of only punctuation is not reported', () => {
+    assert.deepEqual(parse('1| , 4/4 ; 1/4=90').ignored, []);
+  });
+
+  test('every reported fragment can be found in its source line', () => {
+    const src = ['1| aaa 4/4 bbb', 'nonsense', '5| 7/8 x (223) y'].join(NL);
+    const lines = src.split(NL);
+    for (const ig of parse(src).ignored)
+      assert.ok(lines[ig.line].includes(ig.text),
+        `"${ig.text}" not found in line ${ig.line}: "${lines[ig.line]}"`);
+  });
+});

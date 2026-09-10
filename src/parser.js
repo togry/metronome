@@ -107,19 +107,34 @@ function isValidGroupElement(g) {
   return Number.isInteger(g) && g > 0;
 }
 
+// Upper bound on measure numbers. The forward pass walks every measure from 1
+// to the last one mentioned, so a mistyped '1000000||' costs ~190MB and a
+// frozen tab. No real piece comes close — a Mahler symphony is around a
+// thousand bars — so past this it is a typo, and saying so beats hanging.
+export const MAX_MEASURES = 10000;
+
 // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
 const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
 
 export function parseScore(text, t) {
-  const lines = text.split('\n')
-    .map(l => l.replace(/\s*(\/\/|#).*$/, '').trim())
-    .filter(l => l);
+  const srcLines = text.split('\n');
+  // Text the parser drops on the floor: whole lines it cannot read, and
+  // trailing junk on lines it can. Collected so the editor can colour it —
+  // silently ignoring input is the failure mode hardest to notice.
+  const ignored = [];
 
   const rawEvents = [];
 
-  for (const line of lines) {
+  for (let li = 0; li < srcLines.length; li++) {
+    const line = srcLines[li].replace(/\s*(\/\/|#).*$/, '').trim();
+    if (!line) continue;
     const m = line.match(SEP_RE);
-    if (!m) continue;
+    if (!m) { ignored.push({ line: li, text: line }); continue; }
+    // Fragments of this line that no field claimed. Collected as separate
+    // pieces rather than one string: a field can be matched from the middle
+    // of the line, leaving junk on both sides of it, and each side has to be
+    // findable in the source on its own to be marked.
+    const lineIgnored = [];
     const bracketed = m[1] === '[' && m[3] === ']';
     const measure   = parseInt(m[2]);
     const sep       = m[4];
@@ -145,45 +160,66 @@ export function parseScore(text, t) {
     if (remaining.startsWith('$')) { ev.segno    = true; remaining = remaining.slice(1).trim(); }
     if (remaining.startsWith('@')) { ev.codaJump = true; remaining = remaining.slice(1).trim(); }
 
-    const tsM = remaining.match(/(\d+)\/(\d+)(?![.=])/);
-    if (tsM) {
-      ev.numerator   = parseInt(tsM[1]);
-      ev.denominator = parseInt(tsM[2]);
-      remaining = remaining.slice(remaining.indexOf(tsM[0]) + tsM[0].length).trim();
+    // From here the rest of the line is a list of unconsumed segments rather
+    // than one string. Each field is cut out of whichever segment holds it,
+    // splitting that segment in two. Keeping the pieces apart matters: a field
+    // can sit in the middle of the line, and joining what is left on either
+    // side of it would produce text that appears nowhere in the source and so
+    // could not be located or marked.
+    let segs = remaining ? [remaining] : [];
+
+    // Cut the first match of `re` at or after segment `from`. Returns the
+    // match and the index at which to continue searching, or null.
+    function take(re, from = 0) {
+      for (let i = from; i < segs.length; i++) {
+        const mm = segs[i].match(re);
+        if (!mm) continue;
+        const at     = segs[i].indexOf(mm[0]);
+        const before = segs[i].slice(0, at).trim();
+        const after  = segs[i].slice(at + mm[0].length).trim();
+        segs.splice(i, 1, ...[before, after].filter(Boolean));
+        return { m: mm, next: before ? i + 1 : i };
+      }
+      return null;
     }
 
-    const grpM = remaining.match(/\(([0-9+.\[\]:]+)\)/);
-    if (grpM) {
-      ev.grouping = parseGrouping(grpM[1]);
-      remaining = remaining.slice(remaining.indexOf(grpM[0]) + grpM[0].length).trim();
+    const tsR = take(/(\d+)\/(\d+)(?![.=])/);
+    if (tsR) {
+      ev.numerator   = parseInt(tsR.m[1]);
+      ev.denominator = parseInt(tsR.m[2]);
     }
 
-    if (/\ba tempo\b/i.test(remaining)) {
-      ev.atempo  = true;
-      remaining  = remaining.replace(/\ba tempo\b/i, '').trim();
-    }
+    const grpR = take(/\(([0-9+.\[\]:]+)\)/);
+    if (grpR) ev.grouping = parseGrouping(grpR.m[1]);
 
-    const ritM = remaining.match(/\b(rit|accel)\b/i);
-    if (ritM) {
-      ev.ritKind      = ritM[1].toLowerCase();
-      const ritIdx    = remaining.search(/\b(rit|accel)\b/i);
-      const beforeRit = remaining.slice(0, ritIdx).trim();
-      const afterRit  = remaining.slice(ritIdx + ritM[0].length).trim();
-      remaining       = beforeRit;
-      const ritTempoM = afterRit.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
-      if (ritTempoM) {
-        ev.ritTargetDenom  = parseInt(ritTempoM[1]);
-        ev.ritTargetDotted = ritTempoM[2] === '.';
-        ev.ritTargetBPM    = parseInt(ritTempoM[3]);
+    if (take(/\ba tempo\b/i)) ev.atempo = true;
+
+    // The rit target is whichever tempo follows the keyword; the main tempo is
+    // whichever one precedes it. Searching for the target only from after the
+    // keyword's segment is what keeps the two apart.
+    const ritR = take(/\b(rit|accel)\b/i);
+    if (ritR) {
+      ev.ritKind = ritR.m[1].toLowerCase();
+      const tgtR = take(/1\/(\d+)(\.?)\s*=\s*(\d+)/, ritR.next);
+      if (tgtR) {
+        ev.ritTargetDenom  = parseInt(tgtR.m[1]);
+        ev.ritTargetDotted = tgtR.m[2] === '.';
+        ev.ritTargetBPM    = parseInt(tgtR.m[3]);
       }
     }
 
-    const tempoM = remaining.match(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
-    if (tempoM) {
-      ev.tempoDenom  = parseInt(tempoM[1]);
-      ev.tempoDotted = tempoM[2] === '.';
-      ev.tempoBPM    = parseInt(tempoM[3]);
+    const tempoR = take(/1\/(\d+)(\.?)\s*=\s*(\d+)/);
+    if (tempoR) {
+      ev.tempoDenom  = parseInt(tempoR.m[1]);
+      ev.tempoDotted = tempoR.m[2] === '.';
+      ev.tempoBPM    = parseInt(tempoR.m[3]);
     }
+
+    // Whatever is left is ignored, already in source order. Commas and
+    // semicolons are decorative in this syntax ("4/4, 1/4=90"), so a fragment
+    // made only of those does not count.
+    for (const frag of segs)
+      if (frag.replace(/[,;]/g, '').trim()) ignored.push({ line: li, text: frag });
 
     rawEvents.push(ev);
   }
@@ -225,7 +261,14 @@ export function parseScore(text, t) {
     if (ev.atempo) changes[mn].atempo = true;
   }
 
-  const lastDefinedMeasure = Math.max(...Object.keys(changes).map(Number), 1);
+  const highestMeasure = Math.max(...Object.keys(changes).map(Number), 1);
+  if (highestMeasure > MAX_MEASURES) {
+    throw new Error(t
+      ? t.errTooManyMeasures(highestMeasure, MAX_MEASURES)
+      : `m.${highestMeasure}: measure number exceeds the limit of ${MAX_MEASURES} — check for a typo`);
+  }
+
+  const lastDefinedMeasure = highestMeasure;
   const noExplicitEnd      = lastDoublebar === null;
   const endAt              = noExplicitEnd ? lastDefinedMeasure : lastDoublebar;
 
@@ -476,5 +519,5 @@ export function parseScore(text, t) {
     walk(1, endAt, false, false, false);
   }
 
-  return { measures, seq, endAt, segnoAt, codaAt, warnings, loopScore: noExplicitEnd };
+  return { measures, seq, endAt, segnoAt, codaAt, warnings, ignored, loopScore: noExplicitEnd };
 }

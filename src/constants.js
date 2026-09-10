@@ -58,6 +58,7 @@ export const PALETTES = {
     textDim:   '#c0c0db',
     textFaint: '#a7a7c7',
     code:      '#00cc88',
+    commentBg: '#2b2b38',
     reh:       '#88aaff',
   },
   light: {
@@ -80,6 +81,7 @@ export const PALETTES = {
     textDim:   '#3e3428',
     textFaint: '#403828',
     code:      '#004d2a',
+    commentBg: '#c2bba9',
     reh:       '#1a3a8a',
   },
 };
