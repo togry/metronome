@@ -43,6 +43,7 @@ const no = {
   tooltipTempoReset: 'Tilbake til angitt tempo (100 %)',
   labelBpm:        'slag/min',
   labelBt:         'BT',
+  labelBtAuto:     'auto',
 
   // ── Pattern visualiser ──────────────────────────────────────────────────────
   labelPattern:    'RYTME',

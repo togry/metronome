@@ -8,7 +8,7 @@ export default function Timeline({
   totalMeasures, timelineContentWidth, pxPerSlot, measPx,
   timelineEvents,
   loopStart, loopEnd, startMeasure, currentMeasure, playing,
-  timelineRef, timelineScrollRef, playheadRef,
+  timelineRef, timelineScrollRef, playheadRef, showPlayhead,
   onMouseDown, onTouchStart, onTouchMove, onTouchEnd,
 }) {
   const activeLineRef = useRef(null);
@@ -125,7 +125,10 @@ export default function Timeline({
         >
           {lines.map((line, li) => {
             // Not gated on `playing` — the playhead stays where it stopped.
-            const lineHasActive = currentMeasure >= line.start
+            // It is gated on showPlayhead, which goes false once the cursor is
+            // moved, since the frozen position is then stale.
+            const lineHasActive = showPlayhead
+              && currentMeasure >= line.start
               && currentMeasure <= line.end;
             const lineHasStart  = startMeasure >= line.start
               && startMeasure <= line.end;

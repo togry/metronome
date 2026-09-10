@@ -44,6 +44,7 @@ const en = {
   tooltipTempoReset: 'Back to written tempo (100%)',
   labelBpm:        'bpm',
   labelBt:         'BT',
+  labelBtAuto:     'auto',
 
   // ── Pattern visualiser ──────────────────────────────────────────────────────
   labelPattern:    'PATTERN',

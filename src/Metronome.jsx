@@ -91,6 +91,10 @@ export default function Metronome() {
   const patternDotsRef   = useRef([]);     // array of DOM elements, one per beat dot
   const [startMeasure,   setStartMeasure]   = useState(1);
   const [previewMeasure, setPreviewMeasure] = useState(1);
+  // The playhead marks a *playback* position, so it exists only once something
+  // has played. It survives a stop, frozen and dimmed, but not a reposition —
+  // see the effect below.
+  const [playheadVisible, setPlayheadVisible] = useState(false);
   const [loopStart,      setLoopStart]      = useState(null);
   const [loopEnd,        setLoopEnd]        = useState(null);
 
@@ -98,6 +102,10 @@ export default function Metronome() {
   const [subdivIdx,      setSubdivIdx]      = useState(saved.subdivIdx ?? 1);   // 'Primary beats' — index 0 is 'Once per measure'
   const [tempoScale,     setTempoScale]     = useState(saved.tempoScale ?? 100);
   const [btLatency,      setBtLatency]      = useState(saved.btLatency ?? 0);
+  // Once the user moves the BT slider their value stands and auto-detection
+  // stops. Persisted, because otherwise a restored btLatency of 0 would be
+  // indistinguishable from "never touched" and detection would never re-run.
+  const [btUserSet,      setBtUserSet]      = useState(saved.btUserSet ?? false);
   const [showBtSlider,   setShowBtSlider]   = useState(false);
   const [countInEnabled,    setCountInEnabled]    = useState(saved.countInEnabled  ?? false);
   const [countInOnRepeat,   setCountInOnRepeat]   = useState(saved.countInOnRepeat ?? false);
@@ -111,12 +119,12 @@ export default function Metronome() {
   // in their temporal dead zone and throw before the app ever mounts.
   useEffect(() => {
     const id = setTimeout(() => saveSettings({
-      theme, subdivIdx, tempoScale, btLatency,
+      theme, subdivIdx, tempoScale, btLatency, btUserSet,
       countInEnabled, countInOnRepeat, countInBeats, countInDenom,
       scoreWidth,
     }), 300);
     return () => clearTimeout(id);
-  }, [theme, subdivIdx, tempoScale, btLatency,
+  }, [theme, subdivIdx, tempoScale, btLatency, btUserSet,
       countInEnabled, countInOnRepeat, countInBeats, countInDenom, scoreWidth]);
 
   // Reset everything to factory defaults, from the ♩ in the header. Destructive
@@ -163,6 +171,7 @@ export default function Metronome() {
     setSubdivIdx(1);
     setTempoScale(100);
     setBtLatency(0);
+    setBtUserSet(false); btAutoRef.current = null;
     setCountInEnabled(false); setCountInOnRepeat(false);
     setCountInBeats(4);       setCountInDenom(4);
     setScoreWidth(270);
@@ -208,6 +217,8 @@ export default function Metronome() {
   const subdivIdxRef       = useRef(subdivIdx);       subdivIdxRef.current = subdivIdx;
   const tempoScaleRef      = useRef(tempoScale / 100); tempoScaleRef.current = tempoScale / 100;
   const btLatencyRef       = useRef(btLatency / 1000); btLatencyRef.current = btLatency / 1000;
+  const btUserSetRef       = useRef(btUserSet);        btUserSetRef.current = btUserSet;
+  const btAutoRef          = useRef(null);   // last auto-applied value, ms
   const startMeasureRef    = useRef(startMeasure);    startMeasureRef.current = startMeasure;
   const loopStartRef       = useRef(loopStart);       loopStartRef.current = loopStart;
   const loopEndRef         = useRef(loopEnd);         loopEndRef.current = loopEnd;
@@ -231,6 +242,17 @@ export default function Metronome() {
   useEffect(() => {
     if (playing) setPreviewMeasure(currentMeasure);
   }, [playing, currentMeasure]);
+
+  // A frozen playhead means "where playback left off", which stops being true
+  // the moment the cursor is put somewhere else — the readouts follow the
+  // cursor, so leaving the needle behind contradicts them. Keyed on
+  // startMeasure alone so that every way of moving the cursor is covered at
+  // once: timeline click, drag, tap, arrow keys, the START field, parsing a new
+  // score, reset. `playing` is deliberately not a dependency — adding it would
+  // fire this on stop and erase the needle we mean to leave standing.
+  useEffect(() => {
+    if (!playing) setPlayheadVisible(false);
+  }, [startMeasure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Audio ──────────────────────────────────────────────────────────────────
   function getAudioCtx() {
@@ -316,7 +338,11 @@ export default function Metronome() {
           tickData.weight === 1 ? [700,  0.40] :
                                   [460,  0.15];
         osc.frequency.value = freq;
-        const tAudio = Math.max(ctx.currentTime, t - btLatencyRef.current);
+        // Audio plays at the true beat time. Bluetooth is compensated by
+        // delaying the VISUALS instead (see tVis below) — pulling the audio
+        // earlier used to clamp against ctx.currentTime, which silently capped
+        // compensation at the 150 ms lookahead and made it jitter by a frame.
+        const tAudio = Math.max(ctx.currentTime, t);
         g.gain.setValueAtTime(vol, tAudio);
         g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
         osc.start(tAudio); osc.stop(tAudio + 0.07);
@@ -343,14 +369,20 @@ export default function Metronome() {
       // whose ticks all target the same dot — 'once per measure', or any
       // single-beat bar — would stay permanently lit. At fast subdivisions the
       // cap never binds and the dot stays lit right up to the next tick, as before.
+      // tVis: when this beat will actually be HEARD, which is when it should
+      // be seen. Everything visual hangs off it — flash on, flash off, and the
+      // bar the playhead is crossing — so the whole display shifts together.
+      const bt   = btLatencyRef.current;
+      const tVis = t + bt;
+
       if (!pendingVisualRef.current) pendingVisualRef.current = [];
       pendingVisualRef.current.push({
         measure,
         beat:    tickIdx,
         weight:  tickData.weight,
-        fireAt:  t,   // ctx.currentTime value at which visuals should fire
-        offAt:   t + Math.min(FLASH_MAX_SEC, tickSec),
-        measureStartAt: measureStartAtRef.current,
+        fireAt:  tVis,   // ctx.currentTime value at which visuals should fire
+        offAt:   tVis + Math.min(FLASH_MAX_SEC, tickSec),
+        measureStartAt: measureStartAtRef.current + bt,
         measureSec:     measureSecRef.current,
       });
 
@@ -465,6 +497,23 @@ export default function Metronome() {
 
     function rafLoop() {
       const ctx = audioCtxRef.current;
+
+      // Seed the BT offset from the device until the user overrides it.
+      // outputLatency is the output device's own reported delay, which on some
+      // platforms includes the Bluetooth stack. Polled rather than read once,
+      // because it is 0 until the context is actually running and it changes
+      // when headphones are swapped mid-session. A 20 ms deadband keeps small
+      // fluctuations from nudging the slider around.
+      if (ctx && !btUserSetRef.current) {
+        const ol = ctx.outputLatency;
+        if (typeof ol === 'number' && isFinite(ol) && ol >= 0 && ol < 1) {
+          const ms = Math.min(500, Math.round(ol * 1000 / 10) * 10);
+          if (btAutoRef.current === null || Math.abs(ms - btAutoRef.current) >= 20) {
+            btAutoRef.current = ms;
+            setBtLatency(ms);
+          }
+        }
+      }
 
       // Handle deferred loop restart with count-in
       if (ctx && pendingRestartRef.current) {
@@ -590,14 +639,14 @@ export default function Metronome() {
           el.style.background = active ? col : col + '28';
           el.style.boxShadow  = active ? `0 0 14px ${col}, 0 0 28px ${col}55` : 'none';
         }
-      }, Math.max(0, (t - ctx.currentTime) * 1000));
+      }, Math.max(0, (t + btLatencyRef.current - ctx.currentTime) * 1000));
     }
 
     const resumeAt = startT + ciBeats * oneBeatSec;
     setTimeout(() => {
       setCountingIn(false);
       setCountInRemaining(0);
-    }, Math.max(0, (resumeAt - ctx.currentTime) * 1000));
+    }, Math.max(0, (resumeAt + btLatencyRef.current - ctx.currentTime) * 1000));
 
     return resumeAt;
   }, []);
@@ -613,6 +662,7 @@ export default function Metronome() {
     currentMeasureRef.current = seq[startIdx] ?? realStart;
     setCurrentMeasure(seq[startIdx] ?? realStart);
     setPreviewMeasure(seq[startIdx] ?? realStart);
+    setPlayheadVisible(true);
     currentBeatRef.current = 0;
     flashRef.current = null;
     pendingRestartRef.current = null;
@@ -1263,17 +1313,19 @@ export default function Metronome() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <label style={{ fontSize: 9, color: active ? C.unit : C.textFaint, letterSpacing: 1,
                       cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowBtSlider(false)}>
-                      {t.labelBt} <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span> ▲
+                      {t.labelBt} <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span>
+                      {!btUserSet && btLatency > 0 &&
+                        <span style={{ color: C.textFaint, fontSize: 9 }}> {t.labelBtAuto}</span>} ▲
                     </label>
                     {active && (
-                      <button onClick={() => setBtLatency(0)} style={{
+                      <button onClick={() => { setBtLatency(0); setBtUserSet(true); }} style={{
                         background: 'transparent', border: 'none', color: C.textFaint,
                         fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: 1,
                       }}>✕</button>
                     )}
                   </div>
                   <input type="range" min={0} max={500} step={10} value={btLatency}
-                    onChange={e => setBtLatency(parseInt(e.target.value))}
+                    onChange={e => { setBtLatency(parseInt(e.target.value)); setBtUserSet(true); }}
                     style={{ width: mobile ? 110 : 120, accentColor: C.unit, cursor: 'pointer' }}
                   />
                 </div>
@@ -1419,7 +1471,7 @@ export default function Metronome() {
             startMeasure={startMeasure} currentMeasure={currentMeasure}
             playing={playing}
             timelineRef={timelineRef} timelineScrollRef={timelineScrollRef}
-            playheadRef={playheadRef}
+            playheadRef={playheadRef} showPlayhead={playheadVisible}
             onMouseDown={handleTimelineMouseDown}
             onTouchStart={handleTimelineTouchStart}
             onTouchMove={handleTimelineTouchMove}
