@@ -1,6 +1,6 @@
 // ─── Timeline strip — wrapping multi-line layout ──────────────────────────────
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { groupingShortLabel } from '../beatModel.js';
 
 export default function Timeline({
@@ -28,10 +28,29 @@ export default function Timeline({
   const R4 = 38;
 
   // ── Compute wrapping ────────────────────────────────────────────────────────
-  // Use the scroll container's actual width; fall back on first render.
-  const containerWidth = timelineScrollRef.current
-    ? timelineScrollRef.current.clientWidth - 2   // -2 for border
-    : (typeof window !== 'undefined' ? window.innerWidth - (mobile ? 24 : 80) : 600);
+  // Measured from the scroll container itself. The guess below is only ever
+  // used for the very first render pass, before any DOM exists to measure;
+  // it is wrong on desktop, where the strip is narrower than the window by the
+  // score sidebar. useLayoutEffect corrects it after layout but *before* paint,
+  // so the bad value is never shown. A ResizeObserver then keeps it right when
+  // the window changes or the sidebar divider is dragged, without depending on
+  // the parent re-rendering for the same reason.
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = timelineScrollRef.current;
+    if (!el) return;
+    const measure = () => setMeasuredWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [timelineScrollRef]);
+
+  const rawWidth = measuredWidth
+    || timelineScrollRef.current?.clientWidth
+    || (typeof window !== 'undefined' ? window.innerWidth - (mobile ? 24 : 80) : 600);
+  const containerWidth = rawWidth - 2;   // -2 for border
 
   const MIN_PX      = mobile ? 22 : 26;
   const naturalPx   = containerWidth / Math.max(1, totalMeasures);
