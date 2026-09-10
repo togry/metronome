@@ -44,6 +44,7 @@ const no = {
   labelBpm:        'slag/min',
   labelBt:         'BT',
   labelBtAuto:     'auto',
+  tooltipBtAuto:   'Bruk forsinkelsen enheten oppgir',
 
   // ── Pattern visualiser ──────────────────────────────────────────────────────
   labelPattern:    'RYTME',

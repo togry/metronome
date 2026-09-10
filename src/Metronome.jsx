@@ -1308,33 +1308,41 @@ export default function Metronome() {
             {/* BT latency */}
             {(() => {
               const active = btLatency > 0;
+              // Green while the offset is coming from the device, blue once it
+              // has been set by hand — the colour says where the number is from.
+              const btCol  = btUserSet ? C.unit : C.green;
               if (showBtSlider) return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <label style={{ fontSize: 9, color: active ? C.unit : C.textFaint, letterSpacing: 1,
+                    <label style={{ fontSize: 9, color: active ? btCol : C.textFaint, letterSpacing: 1,
                       cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowBtSlider(false)}>
                       {t.labelBt} <span style={{ color: C.textDim, fontSize: 10 }}>{btLatency} ms</span>
                       {!btUserSet && btLatency > 0 &&
-                        <span style={{ color: C.textFaint, fontSize: 9 }}> {t.labelBtAuto}</span>} ▲
+                        <span style={{ color: C.green, fontSize: 9 }}> {t.labelBtAuto}</span>} ▲
                     </label>
-                    {active && (
-                      <button onClick={() => { setBtLatency(0); setBtUserSet(true); }} style={{
-                        background: 'transparent', border: 'none', color: C.textFaint,
-                        fontSize: 9, cursor: 'pointer', padding: 0, lineHeight: 1,
-                      }}>✕</button>
+                    {/* Offered whenever the value has been overridden — including
+                        an override to 0, which would otherwise be a one-way door
+                        out of auto-detection. Setting the slider to 0 by hand is
+                        still how you force "no compensation". */}
+                    {btUserSet && (
+                      <button onClick={() => { setBtUserSet(false); btAutoRef.current = null; }}
+                        title={t.tooltipBtAuto} style={{
+                        background: 'transparent', border: 'none', color: C.green,
+                        fontSize: 11, cursor: 'pointer', padding: 0, lineHeight: 1,
+                      }}>↺</button>
                     )}
                   </div>
                   <input type="range" min={0} max={500} step={10} value={btLatency}
                     onChange={e => { setBtLatency(parseInt(e.target.value)); setBtUserSet(true); }}
-                    style={{ width: mobile ? 110 : 120, accentColor: C.unit, cursor: 'pointer' }}
+                    style={{ width: mobile ? 110 : 120, accentColor: btCol, cursor: 'pointer' }}
                   />
                 </div>
               );
               return (
                 <button onClick={() => setShowBtSlider(true)} style={{
-                  background: active ? `${C.unit}18` : 'transparent',
-                  border: `1px solid ${active ? C.unit : C.border}`,
-                  color: active ? C.unit : C.textFaint,
+                  background: active ? `${btCol}18` : 'transparent',
+                  border: `1px solid ${active ? btCol : C.border}`,
+                  color: active ? btCol : C.textFaint,
                   borderRadius: 3, padding: '3px 7px', cursor: 'pointer',
                   fontSize: 9, letterSpacing: 1, alignSelf: 'flex-end', marginBottom: 2,
                 }}>

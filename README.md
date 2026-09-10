@@ -282,8 +282,13 @@ the ordinary way to write a piece that repeats from the top.
   Tap the percentage to return to 100%. On a touchscreen the slider moves in
   5% steps rather than 1%, which is the difference between 29 positions on the
   track and 141
-- **BT** — Bluetooth latency offset (0–500 ms); compensates for wireless
-  headphone delay so clicks and visual flashes align with what you hear
+- **BT** — Bluetooth latency offset (0–500 ms), which delays the visual
+  flashes so they land with the sound rather than ahead of it. It starts from
+  the delay the browser reports for the current output device and follows it
+  when you change headphones, so usually there is nothing to set. The readout
+  is **green while the value comes from the device** and **blue once you move
+  the slider**; ↺ hands it back to the device. Setting the slider to 0 is how
+  you turn compensation off — distinct from ↺, which resumes tracking
 - **☀ / 🌙** — toggle between dark and daylight colour palettes
 
 ### Saved state and reset
@@ -418,8 +423,26 @@ tagged with the time it should fire. A `requestAnimationFrame` loop drains
 that queue by comparing against `ctx.currentTime` and mutates the DOM
 directly, so flashes stay locked to the clicks without `setTimeout` jitter or
 a React re-render per beat. React state updates only when the measure
-changes. The **BT** control offsets audio earlier than visuals to compensate
-for Bluetooth output latency.
+changes.
+
+**Bluetooth compensation delays the visuals, not the audio.** Clicks are
+scheduled at the true beat time and every visual — flash on, flash off, and
+the bar the playhead is crossing — is offset later by the BT value, so the
+display lands when the sound is actually heard. The reverse, pulling the audio
+earlier, is the obvious approach and is wrong: `t - offset` falls before
+`ctx.currentTime` once the offset exceeds the 150 ms lookahead, the clamp
+guarding against scheduling in the past silently caps compensation at ~150 ms,
+and the residual then swings by a whole lookahead window from tick to tick —
+worse than no compensation at typical Bluetooth delays of 150–250 ms. The
+count-in carries the same offset; it is easy to miss, since it schedules its
+own clicks and flashes separately from the main loop.
+
+The offset seeds itself from `AudioContext.outputLatency`, polled each frame
+rather than read once, because it reads 0 until the context is running and it
+changes when the output device does. A persisted `btUserSet` flag, not the
+stored value, decides whether to keep tracking: every saved settings blob
+carries `btLatency`, so treating "a value exists" as "the user chose it" would
+disable detection for everyone after their first session.
 
 Two things ride on that same loop. Each queued tick carries an *off* time as
 well as a fire time, so a flash ends on its own rather than waiting to be

@@ -45,6 +45,7 @@ const en = {
   labelBpm:        'bpm',
   labelBt:         'BT',
   labelBtAuto:     'auto',
+  tooltipBtAuto:   'Use the delay reported by the device',
 
   // ── Pattern visualiser ──────────────────────────────────────────────────────
   labelPattern:    'PATTERN',
