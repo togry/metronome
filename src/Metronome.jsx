@@ -205,6 +205,10 @@ export default function Metronome() {
   // stamped onto each queued visual so the playhead can glide within the bar.
   const measureStartAtRef  = useRef(0);
   const measureSecRef      = useRef(1);
+  // Timing of the bar the playhead is crossing. Null means "not playing a bar
+  // yet" — during a count-in, before the first tick. Stale values here put the
+  // needle a whole measure ahead, since the glide fraction clamps to 1.
+  const needleRef          = useRef({ startAt: null, sec: 1 });
   const playheadRef        = useRef(null);
   const isPlayingRef       = useRef(false);
   const parsedRef          = useRef(parsed);          parsedRef.current = parsed;
@@ -422,10 +426,6 @@ export default function Metronome() {
     // nothing is lit. Set by the queue drain below, cleared when it expires.
     let flashOffAt = null;
 
-    // Timing of the bar the playhead is currently crossing.
-    let needleStartAt = null;
-    let needleSec     = 1;
-
     // Dim all pattern dots unconditionally — don't rely on _active flag
     // since React ref callbacks reset _active without updating DOM styles.
     function dimAllDots() {
@@ -521,6 +521,7 @@ export default function Metronome() {
         if (ctx.currentTime >= resumeAt - 0.05) {
           pendingRestartRef.current = null;
           posRef.current = { seqIdx, tick: 0 };
+          needleRef.current = { startAt: null, sec: 1 };
           const ciResumeAt = scheduleCountIn(ctx, resumeAt, seqIdx);
           nextTickTimeRef.current = ciResumeAt;
           isPlayingRef.current = true;
@@ -544,8 +545,7 @@ export default function Metronome() {
           const lit = queue[i - 1];
           applyVisual(lit, true);
           flashOffAt    = lit.weight > 0 ? lit.offAt : null;
-          needleStartAt = lit.measureStartAt;
-          needleSec     = lit.measureSec || 1;
+          needleRef.current = { startAt: lit.measureStartAt, sec: lit.measureSec || 1 };
           pendingVisualRef.current = queue.slice(i);
         }
       }
@@ -553,12 +553,17 @@ export default function Metronome() {
       // Glide the playhead across the current bar. Driven straight from the
       // audio clock every frame — no React state, so no re-render per beat.
       // Frozen where it stands when stopped: we simply stop writing to it.
-      if (ctx && isPlayingRef.current && needleStartAt !== null) {
+      if (ctx && isPlayingRef.current) {
         const el = playheadRef.current;
         // Skip while React has yet to move the element to the current bar —
         // its `left` and our offset would otherwise disagree for a frame.
         if (el && el._measure === currentMeasureRef.current) {
-          const frac = Math.max(0, Math.min(1, (ctx.currentTime - needleStartAt) / needleSec));
+          // No bar timing yet (counting in) parks the needle at the start of
+          // the measure rather than leaving the previous run's offset in place.
+          const { startAt, sec } = needleRef.current;
+          const frac = startAt === null
+            ? 0
+            : Math.max(0, Math.min(1, (ctx.currentTime - startAt) / sec));
           el.style.transform = `translateX(${frac * (el._slotPx || 0)}px)`;
         }
       }
@@ -663,6 +668,7 @@ export default function Metronome() {
     setCurrentMeasure(seq[startIdx] ?? realStart);
     setPreviewMeasure(seq[startIdx] ?? realStart);
     setPlayheadVisible(true);
+    needleRef.current = { startAt: null, sec: 1 };
     currentBeatRef.current = 0;
     flashRef.current = null;
     pendingRestartRef.current = null;
