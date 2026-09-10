@@ -467,15 +467,19 @@ export default function Metronome() {
 
     function applyVisual(ev, lightDot) {
       // Boundary marker: park on a bar that has not started sounding yet.
-      // No flash of its own — the count-in draws its own beats.
+      // Deliberately touches no dots. It fires at the same instant as the
+      // count-in's first flash, and setTimeout and rAF have no defined order
+      // between them, so dimming here would sometimes land after that flash
+      // and erase it — leaving the count-in's first beat dark while every
+      // later one flashed. Nothing needs dimming at this point anyway: the
+      // previous bar's last flash ends on its own offAt, FLASH_MAX_SEC after
+      // it lit, which is well before the bar runs out.
       if (ev.park) {
         if (ev.measure !== currentMeasureRef.current) {
           currentMeasureRef.current = ev.measure;
           setCurrentMeasure(ev.measure);
         }
         needleRef.current = { startAt: null, sec: 1 };
-        paintFlashDots(null);
-        dimAllDots();
         return;
       }
 
@@ -568,9 +572,7 @@ export default function Metronome() {
           for (let j = 0; j < i - 1; j++) applyVisual(queue[j], false);
           const lit = queue[i - 1];
           applyVisual(lit, true);
-          if (lit.park) {
-            flashOffAt = null;
-          } else {
+          if (!lit.park) {
             flashOffAt    = lit.weight > 0 ? lit.offAt : null;
             needleRef.current = { startAt: lit.measureStartAt, sec: lit.measureSec || 1 };
           }
