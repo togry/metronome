@@ -189,8 +189,18 @@ export function parseScore(text, t) {
       ev.denominator = parseInt(tsR.m[2]);
     }
 
-    const grpR = take(/\(([0-9+.\[\]:]+)\)/);
-    if (grpR) ev.grouping = parseGrouping(grpR.m[1]);
+    // A grouping may alternate from bar to bar. All four spellings mean the
+    // same cycle: (23,32)  (2+3,3+2)  (23),(32)  (2+3),(3+2)
+    // Commas cannot occur inside a tuplet, so splitting on them is safe.
+    const grpR = take(/\((?:[0-9+.\[\]:,]+)\)(?:\s*,?\s*\((?:[0-9+.\[\]:,]+)\))*/);
+    if (grpR) {
+      ev.groupingCycle = grpR.m[0]
+        .match(/\(([0-9+.\[\]:,]+)\)/g)
+        .flatMap(par => par.slice(1, -1).split(','))
+        .map(alt => alt.trim())
+        .filter(Boolean)
+        .map(parseGrouping);
+    }
 
     if (take(/\ba tempo\b/i)) ev.atempo = true;
 
@@ -244,7 +254,7 @@ export function parseScore(text, t) {
     if (ev.rehearsal)   changes[mn].rehearsal   = ev.rehearsal;
     if (ev.numerator)   changes[mn].numerator   = ev.numerator;
     if (ev.denominator) changes[mn].denominator = ev.denominator;
-    if (ev.grouping)    changes[mn].grouping    = ev.grouping;
+    if (ev.groupingCycle) changes[mn].groupingCycle = ev.groupingCycle;
     if (ev.tempoBPM) {
       changes[mn].tempoDenom  = ev.tempoDenom;
       changes[mn].tempoDotted = ev.tempoDotted || false;
@@ -280,7 +290,7 @@ export function parseScore(text, t) {
   const warnings = [];
 
   // ── Forward pass: build measures[] ──────────────────────────────────────────
-  let state = { numerator: 4, denominator: 4, grouping: null, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
+  let state = { numerator: 4, denominator: 4, grouping: null, cycle: null, cycleStart: 1, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };
   const measures       = [];
   const knownGroupings = {};
 
@@ -289,34 +299,45 @@ export function parseScore(text, t) {
       const c      = changes[mn];
       const newNum = c.numerator   ?? state.numerator;
       const newDen = c.denominator ?? state.denominator;
-      let resolvedGrouping;
-      if (c.grouping) {
-        let g = c.grouping;
+      // Validate and expand one alternative of a cycle.
+      const resolveAlt = (g) => {
         if (!g.length || !g.every(isValidGroupElement)) {
           warnings.push(t ? t.warnGroupingInvalid(mn) : `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`);
-          g = null;
-        } else if (g.length === 1) {
+          return null;
+        }
+        if (g.length === 1) {
           // Single-element shortcut: tile to fill the measure if it divides evenly
           const elemUnits = typeof g[0] === 'object' ? g[0].units : g[0];
-          if (newNum % elemUnits === 0) {
-            const reps = newNum / elemUnits;
-            g = Array.from({ length: reps }, () => g[0]);
-          } else {
+          if (newNum % elemUnits !== 0) {
             warnings.push(t ? t.warnGroupingNotDivisible(mn, elemUnits, newNum, newDen) : `m.${mn}: grouping element (${elemUnits} unit${elemUnits !== 1 ? 's' : ''}) does not divide ${newNum}/${newDen} evenly — grouping ignored`);
-            g = null;
+            return null;
           }
+          return Array.from({ length: newNum / elemUnits }, () => g[0]);
         }
-        resolvedGrouping = g;
-        if (g) knownGroupings[`${newNum}/${newDen}`] = g;
-      } else {
-        resolvedGrouping =
-          knownGroupings[`${newNum}/${newDen}`]
-          ?? (newNum === state.numerator && newDen === state.denominator ? state.grouping : null);
+        return g;
+      };
+
+      let cycle      = state.cycle;
+      let cycleStart = state.cycleStart;
+
+      if (c.groupingCycle) {
+        // A declaration always restarts the cycle here, whatever its length —
+        // a plain grouping is just a cycle of one.
+        const alts = c.groupingCycle.map(resolveAlt).filter(Boolean);
+        cycle      = alts.length ? alts : null;
+        cycleStart = mn;
+        if (cycle) knownGroupings[`${newNum}/${newDen}`] = cycle;
+      } else if (newNum !== state.numerator || newDen !== state.denominator) {
+        // New time signature: take up its remembered cycle from the top.
+        cycle      = knownGroupings[`${newNum}/${newDen}`] ?? null;
+        cycleStart = mn;
       }
+
       state = {
         numerator:   newNum,
         denominator: newDen,
-        grouping:    resolvedGrouping,
+        cycle,
+        cycleStart,
         tempoDenom:  c.tempoDenom  ?? state.tempoDenom,
         tempoDotted: c.tempoDotted ?? state.tempoDotted,
         tempoBPM:    c.tempoBPM    ?? state.tempoBPM,
@@ -325,6 +346,18 @@ export function parseScore(text, t) {
     } else {
       state = { ...state, rehearsal: undefined };
     }
+
+    // Position in the cycle is counted from the bar where it was declared, and
+    // recomputed for EVERY bar — including bars with nothing declared on them,
+    // which is most of them. Deriving it only where something is declared is
+    // the difference between a cycle and a one-off.
+    state = {
+      ...state,
+      grouping: state.cycle
+        ? state.cycle[(mn - state.cycleStart) % state.cycle.length]
+        : null,
+    };
+
     measures[mn] = {
       ...state,
       measureNumber: mn,

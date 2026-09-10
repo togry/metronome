@@ -151,6 +151,10 @@ const en = {
       'Compound (6/8, 12/8): primary beat = dotted quarter automatically.',
       'Odd meters: add grouping, e.g.  7/8 (2+2+3)  or  5/8 (2+3)',
       'Groupings are remembered per time signature across the score.',
+      'Alternating subdivisions: list the alternatives and they cycle,',
+      '  5/8 (23,32)   m.1 = 2+3, m.2 = 3+2, m.3 = 2+3 ...',
+      '  Same thing:  (2+3,3+2)   (23),(32)   (2+3),(3+2)',
+      '  Any length:  7/8 (223,232,322) repeats every three bars.',
     ]},
     { h: 'Tempo', body: [
       'Written as 1/note=BPM.  Examples:',

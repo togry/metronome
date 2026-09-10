@@ -110,6 +110,29 @@ Groupings are remembered per time signature. If you write `7/8 (2+2+3)` at
 measure 4 and bare `7/8` at measure 19, measure 19 automatically inherits
 `(2+2+3)`.
 
+**Alternating groupings** — where the subdivision changes from bar to bar,
+give the alternatives as a list and they cycle:
+
+```
+1| 5/8 (23,32)        m.1 is 2+3, m.2 is 3+2, m.3 is 2+3, …
+```
+
+All four spellings mean the same thing, so use whichever reads better:
+
+```
+(23,32)      (2+3,3+2)      (23),(32)      (2+3),(3+2)
+```
+
+A cycle can be any length — `7/8 (223,232,322)` repeats every three bars — and
+the alternatives can differ freely, mixing tuplets and plain groups. A single
+grouping is simply a cycle of one, which is why the ordinary form still works.
+
+The cycle counts from the bar where it was declared and keeps running through
+the bars that follow, including bars with nothing written on them. Declaring a
+grouping again restarts it, so `4| (23,32)` re-aligns the alternation to m.4.
+A remembered cycle picked up by a later bare time signature also starts from
+the top.
+
 ### Tuplets & rhythmic patterns
 
 A tuplet group fits a set of notes into a given number of denom-units:

@@ -641,3 +641,91 @@ describe('ignored text on both sides of a field', () => {
         `"${ig.text}" not found in line ${ig.line}: "${lines[ig.line]}"`);
   });
 });
+
+describe('alternating groupings', () => {
+  const NL = String.fromCharCode(10);
+  const groupingsOf = (src, upto) => {
+    const { measures } = parse(src);
+    const out = [];
+    for (let m = 1; m <= upto; m++) out.push(measures[m]?.grouping ?? null);
+    return out;
+  };
+
+  test('all four spellings mean the same cycle', () => {
+    const expected = [[2, 3], [3, 2], [2, 3], [3, 2]];
+    for (const form of ['(23,32)', '(2+3,3+2)', '(23),(32)', '(2+3),(3+2)'])
+      assert.deepEqual(groupingsOf(`1| 5/8 ${form}${NL}9||`, 4), expected, form);
+  });
+
+  test('spaces around the separators are allowed', () => {
+    assert.deepEqual(groupingsOf(`1| 5/8 (2+3) , (3+2)${NL}9||`, 4),
+      [[2, 3], [3, 2], [2, 3], [3, 2]]);
+  });
+
+  test('a cycle can be any length, not just two', () => {
+    assert.deepEqual(groupingsOf(`1| 7/8 (223,232,322)${NL}9||`, 7),
+      [[2, 2, 3], [2, 3, 2], [3, 2, 2], [2, 2, 3], [2, 3, 2], [3, 2, 2], [2, 2, 3]]);
+  });
+
+  test('a single grouping is just a cycle of one', () => {
+    assert.deepEqual(groupingsOf(`1| 5/8 (23)${NL}5||`, 4),
+      [[2, 3], [2, 3], [2, 3], [2, 3]]);
+  });
+
+  test('the cycle advances over bars that declare nothing', () => {
+    // The bars in between carry no line of their own; the alternation has to
+    // keep running through them.
+    const g = groupingsOf(`1| 5/8 (23,32) 1/4=120${NL}9||`, 8);
+    assert.deepEqual(g.map(x => x.join('+')),
+      ['2+3', '3+2', '2+3', '3+2', '2+3', '3+2', '2+3', '3+2']);
+  });
+
+  test('a later declaration restarts the cycle from its own bar', () => {
+    const g = groupingsOf(`1| 5/8 (23,32)${NL}4| (32,23)${NL}9||`, 6);
+    assert.deepEqual(g.map(x => x.join('+')),
+      ['2+3', '3+2', '2+3', '3+2', '2+3', '3+2']);
+  });
+
+  test('an odd-numbered restart shifts the phase', () => {
+    const g = groupingsOf(`1| 5/8 (23,32)${NL}4| (23,32)${NL}9||`, 6);
+    assert.deepEqual(g.map(x => x.join('+')),
+      ['2+3', '3+2', '2+3', '2+3', '3+2', '2+3']);
+  });
+
+  test('a remembered cycle resumes from the top after another meter', () => {
+    const g = groupingsOf(`1| 5/8 (23,32)${NL}5| 4/4${NL}9| 5/8${NL}13||`, 12);
+    assert.deepEqual(g.slice(8).map(x => x.join('+')), ['2+3', '3+2', '2+3', '3+2']);
+    assert.equal(g[4], null);   // the 4/4 bars have no grouping
+  });
+
+  test('alternatives may mix tuplets and plain groups', () => {
+    const g = groupingsOf(`1| 4/4 (1+1+[3:111]+1),(1+1+1+1)${NL}5||`, 4);
+    assert.equal(g[0].length, 4);
+    assert.deepEqual(g[0][2], { units: 1, div: 3, slots: [1, 1, 1] });
+    assert.deepEqual(g[1], [1, 1, 1, 1]);
+    assert.deepEqual(g[2], g[0]);
+  });
+
+  test('single-element tiling applies per alternative', () => {
+    const g = groupingsOf(`1| 6/8 (3),(2)${NL}5||`, 4);
+    assert.deepEqual(g[0], [3, 3]);
+    assert.deepEqual(g[1], [2, 2, 2]);
+  });
+
+  test('a malformed alternative warns and drops out of the cycle', () => {
+    const { measures, warnings } = parse(`1| 5/8 (23,[3:22])${NL}5||`);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /malformed grouping/);
+    // the good alternative survives and simply applies to every bar
+    assert.deepEqual(measures[1].grouping, [2, 3]);
+    assert.deepEqual(measures[2].grouping, [2, 3]);
+  });
+
+  test('a cycle does not leak into a different time signature', () => {
+    const g = groupingsOf(`1| 5/8 (23,32)${NL}3| 4/4${NL}9||`, 4);
+    assert.deepEqual(g[0], [2, 3]);
+    assert.deepEqual(g[1], [3, 2]);
+    assert.equal(g[2], null);
+    assert.equal(g[3], null);
+  });
+});

@@ -147,6 +147,10 @@ const no = {
       'Sammensatte takter (6/8, 12/8): pulsslag = punktert firedel automatisk.',
       'Odde taktarter: legg til gruppering, f.eks.  7/8 (2+2+3)  eller  5/8 (2+3)',
       'Grupperinger huskes per taktart gjennom hele stykket.',
+      'Vekslende underdeling: list alternativene, så går de i sløyfe,',
+      '  5/8 (23,32)   t.1 = 2+3, t.2 = 3+2, t.3 = 2+3 ...',
+      '  Det samme:   (2+3,3+2)   (23),(32)   (2+3),(3+2)',
+      '  Valgfri lengde: 7/8 (223,232,322) gjentas hver tredje takt.',
     ]},
     { h: 'Tempo', body: [
       'Skrives som 1/note=BPM.  Eksempler:',
