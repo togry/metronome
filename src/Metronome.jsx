@@ -236,6 +236,8 @@ export default function Metronome() {
   const playBtnRef         = useRef(null);
   const countInEnabledRef  = useRef(countInEnabled); countInEnabledRef.current = countInEnabled;
   const countInOnRepeatRef = useRef(countInOnRepeat); countInOnRepeatRef.current = countInOnRepeat;
+  // Both must be on: the repeat count-in is a sub-option of the count-in.
+  const shouldCountInOnRepeat = () => countInEnabledRef.current && countInOnRepeatRef.current;
   const countInBeatsRef    = useRef(countInBeats);   countInBeatsRef.current = countInBeats;
   const countInDenomRef    = useRef(countInDenom);   countInDenomRef.current = countInDenom;
   const totalMeasuresRef   = useRef(0);
@@ -291,7 +293,11 @@ export default function Metronome() {
         }
         if (seqIdx >= loopSeqEndRef.current) {
           const restartIdx = loopSeqStartRef.current;
-          if (countInOnRepeatRef.current && !pendingRestartRef.current) {
+          // ON REPEAT only means anything while COUNT IN is on. Its checkbox is
+          // hidden when COUNT IN is off, so its value can sit true and unseen —
+          // and it persists, so a setting made in an earlier session would
+          // otherwise keep counting in with the control nowhere in sight.
+          if (shouldCountInOnRepeat() && !pendingRestartRef.current) {
             // Pause scheduling and queue a count-in before the loop repeats
             pendingRestartRef.current = { seqIdx: restartIdx, resumeAt: nextTickTimeRef.current };
             isPlayingRef.current = false;
@@ -309,7 +315,7 @@ export default function Metronome() {
       // End of sequence
       if (seqIdx >= seq.length) {
         if (parsedRef.current.loopScore) {
-          if (countInOnRepeatRef.current && !pendingRestartRef.current) {
+          if (shouldCountInOnRepeat() && !pendingRestartRef.current) {
             pendingRestartRef.current = { seqIdx: 0, resumeAt: nextTickTimeRef.current };
             isPlayingRef.current = false;
             return;
