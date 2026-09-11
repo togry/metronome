@@ -9,12 +9,13 @@
 // (whiteSpace: 'pre'), only scroll position.
 
 import { useMemo, useRef } from 'react';
-import { parseScore, splitComment } from '../parser.js';
+import { parseScore, splitComment, scoreLabel } from '../parser.js';
 
 export default function ScorePanel({
   C, mobile, scoreText, setScoreText,
   parseError, parseWarnings,
   onParse, onClearPasteParse, onClose, onShowScoreHelp,
+  scores, activeScore, onSelectScore, onAddScore, onDeleteScore,
   scoreWidth, t,
 }) {
   const overlayRef = useRef(null);
@@ -99,8 +100,35 @@ export default function ScorePanel({
       padding: 14, gap: 10,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 9, letterSpacing: 3, color: C.textFaint }}>{t.btnScore}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* A score names itself by its first header comment; untitled ones are
+            numbered. The selector replaces the plain SCORE label so the header
+            gains no extra row. */}
+        <select
+          value={activeScore}
+          onChange={e => onSelectScore(parseInt(e.target.value))}
+          title={t.tooltipSelectScore}
+          style={{
+            background: C.bgDark, border: `1px solid ${C.border}`, color: C.text,
+            fontFamily: 'monospace', fontSize: mobile ? 13 : 11,
+            padding: mobile ? '6px 8px' : '3px 6px', borderRadius: 3,
+            outline: 'none', cursor: 'pointer', minWidth: 0, flex: 1, marginRight: 6,
+          }}
+        >
+          {(scores ?? []).map((sc, i) => (
+            <option key={i} value={i}>{scoreLabel(sc) ?? t.scoreUntitled(i + 1)}</option>
+          ))}
+        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <button onClick={onAddScore} title={t.tooltipAddScore} style={{
+            background: 'transparent', border: `1px solid ${C.border}`,
+            color: C.green, padding: mobile ? '4px 10px' : '2px 8px',
+            cursor: 'pointer', borderRadius: 3, fontSize: 12, lineHeight: 1.2,
+          }}>+</button>
+          <button onClick={onDeleteScore} title={t.tooltipDeleteScore} style={{
+            background: 'transparent', border: `1px solid ${C.border}`,
+            color: C.red, padding: mobile ? '4px 10px' : '2px 8px',
+            cursor: 'pointer', borderRadius: 3, fontSize: 12, lineHeight: 1.2,
+          }}>{t.helpClose}</button>
           <button onClick={onShowScoreHelp} title={t.btnScoreHelpTitle} style={{
             background: 'transparent', border: `1px solid ${C.border}`,
             color: C.gold, padding: mobile ? '4px 10px' : '2px 8px',

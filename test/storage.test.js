@@ -6,7 +6,7 @@
 
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScore, saveScore, loadSettings, saveSettings } from '../src/storage.js';
+import { loadScores, saveScores, loadSettings, saveSettings } from '../src/storage.js';
 
 function fakeStorage(initial = {}) {
   const data = { ...initial };
@@ -23,35 +23,47 @@ function withStorage(s) { globalThis.localStorage = s; }
 afterEach(() => { delete globalThis.localStorage; });
 
 describe('score persistence', () => {
-  test('a saved score is restored', () => {
+  test('a saved list is restored in order', () => {
     withStorage(fakeStorage());
-    assert.equal(saveScore('1| 7/8 (2+2+3) 1/4=90'), true);
-    assert.equal(loadScore(), '1| 7/8 (2+2+3) 1/4=90');
+    assert.equal(saveScores(['1| 7/8 (2+2+3) 1/4=90', '1| 4/4']), true);
+    assert.deepEqual(loadScores(), ['1| 7/8 (2+2+3) 1/4=90', '1| 4/4']);
   });
 
-  test('nothing saved means nothing to restore', () => {
+  test('nothing saved means an empty list, not null', () => {
     withStorage(fakeStorage());
-    assert.equal(loadScore(), null);
+    assert.deepEqual(loadScores(), []);
   });
 
-  test('a blank score restores as nothing, so the default is used', () => {
+  test('blank entries are dropped on the way in and out', () => {
     withStorage(fakeStorage());
-    saveScore('   \n  ');
-    assert.equal(loadScore(), null);
+    saveScores(['1| 4/4', '   ', '']);
+    assert.deepEqual(loadScores(), ['1| 4/4']);
   });
 
-  test('saving a blank score clears the stored one', () => {
-    const s = fakeStorage({ metronomicon_score: '1| 4/4' });
+  test('saving an empty list clears the stored one', () => {
+    const s = fakeStorage({ metronomicon_scores: '["1| 4/4"]' });
     withStorage(s);
-    saveScore('');
-    assert.equal('metronomicon_score' in s.data, false);
+    saveScores([]);
+    assert.equal('metronomicon_scores' in s.data, false);
   });
 
   test('multi-line scores survive intact', () => {
     withStorage(fakeStorage());
-    const score = '1| 4/4 1/4=90\n# a comment\n5| 3/4\n9||';
-    saveScore(score);
-    assert.equal(loadScore(), score);
+    const score = '# Title\n1| 4/4 1/4=90\n5| 3/4\n9||';
+    saveScores([score]);
+    assert.deepEqual(loadScores(), [score]);
+  });
+
+  test('corrupt or non-array JSON is discarded', () => {
+    for (const raw of ['{not json', '{"a":1}', '"a string"', '42']) {
+      withStorage(fakeStorage({ metronomicon_scores: raw }));
+      assert.deepEqual(loadScores(), [], raw);
+    }
+  });
+
+  test('non-string entries are filtered out', () => {
+    withStorage(fakeStorage({ metronomicon_scores: '["1| 4/4", 5, null, {"x":1}]' }));
+    assert.deepEqual(loadScores(), ['1| 4/4']);
   });
 });
 
@@ -100,17 +112,17 @@ describe('settings persistence', () => {
   test('score and settings are stored separately', () => {
     const store = fakeStorage();
     withStorage(store);
-    saveScore('1| 4/4');
+    saveScores(['1| 4/4']);
     saveSettings({ theme: 'light' });
-    assert.equal(store.data.metronomicon_score, '1| 4/4');
+    assert.deepEqual(JSON.parse(store.data.metronomicon_scores), ['1| 4/4']);
     assert.equal(loadSettings().theme, 'light');
   });
 });
 
 describe('when storage is unavailable', () => {
   test('no localStorage at all', () => {
-    assert.equal(loadScore(), null);
-    assert.equal(saveScore('1| 4/4'), false);
+    assert.deepEqual(loadScores(), []);
+    assert.equal(saveScores(['1| 4/4']), false);
     assert.deepEqual(loadSettings(), {});
     assert.equal(saveSettings({ theme: 'light' }), false);
   });
@@ -121,7 +133,7 @@ describe('when storage is unavailable', () => {
       setItem: () => { throw new Error('QuotaExceededError'); },
       removeItem: () => {},
     });
-    assert.equal(saveScore('1| 4/4'), false);
+    assert.equal(saveScores(['1| 4/4']), false);
   });
 
   test('a throwing read falls back to nothing', () => {
@@ -130,6 +142,6 @@ describe('when storage is unavailable', () => {
       setItem: () => {},
       removeItem: () => {},
     });
-    assert.equal(loadScore(), null);
+    assert.deepEqual(loadScores(), []);
   });
 });

@@ -8,7 +8,7 @@ import { getTimelineEvents, computeLoopSeqBounds, timelineGeometry } from './tim
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
 import { getDefaultScore, getRitExampleScore, getTupletExampleScore, getStructureExampleScore } from './constants.js';
 import { useLocale, LOCALES } from './i18n/useLocale.js';
-import { loadScore, saveScore, loadSettings, saveSettings } from './storage.js';
+import { loadScores, saveScores, loadSettings, saveSettings } from './storage.js';
 
 import ScorePanel  from './components/ScorePanel.jsx';
 import HelpModal   from './components/HelpModal.jsx';
@@ -60,7 +60,19 @@ export default function Metronome() {
   // Restored from localStorage when there is one, otherwise the default score.
   // The parse is guarded: a score saved under an older syntax must not be able
   // to take the app down on boot.
-  const [scoreText,     setScoreText]     = useState(() => loadScore() ?? getDefaultScore({}));
+  // Several scores, one active. scoreText/setScoreText stay the interface the
+  // rest of the component uses; they simply read and write the active entry.
+  const [scores,    setScores]    = useState(() => {
+    const saved = loadScores();
+    return saved.length ? saved : [getDefaultScore({})];
+  });
+  const [activeScore, setActiveScore] = useState(() => {
+    const i = saved.activeScore ?? 0;
+    return Number.isInteger(i) && i >= 0 ? i : 0;
+  });
+  const scoreText = scores[Math.min(activeScore, scores.length - 1)] ?? '';
+  const setScoreText = next => setScores(prev => prev.map((sc, i) =>
+    i === activeScore ? (typeof next === 'function' ? next(sc) : next) : sc));
   const [parsed,        setParsed]        = useState(() => {
     try { return parseScore(scoreText); }
     catch { return parseScore(getDefaultScore({})); }
@@ -72,9 +84,9 @@ export default function Metronome() {
   // Saving on edit rather than on parse means an accidental reload cannot lose
   // work in progress, even when it does not parse yet.
   useEffect(() => {
-    const id = setTimeout(() => saveScore(scoreText), 500);
+    const id = setTimeout(() => saveScores(scores), 500);
     return () => clearTimeout(id);
-  }, [scoreText]);
+  }, [scores]);
 
   const [scoreWidth,    setScoreWidth]    = useState(saved.scoreWidth ?? 270);
   const [showScore,     setShowScore]     = useState(false); // mobile drawer
@@ -121,11 +133,11 @@ export default function Metronome() {
     const id = setTimeout(() => saveSettings({
       theme, subdivIdx, tempoScale, btLatency, btUserSet,
       countInEnabled, countInOnRepeat, countInBeats, countInDenom,
-      scoreWidth,
+      scoreWidth, activeScore,
     }), 300);
     return () => clearTimeout(id);
   }, [theme, subdivIdx, tempoScale, btLatency, btUserSet,
-      countInEnabled, countInOnRepeat, countInBeats, countInDenom, scoreWidth]);
+      countInEnabled, countInOnRepeat, countInBeats, countInDenom, scoreWidth, activeScore]);
 
   // Reset everything to factory defaults, from the ♩ in the header. Destructive
   // now that the score persists, so it asks first — window.confirm rather than
@@ -162,7 +174,8 @@ export default function Metronome() {
     if (typeof window !== 'undefined' && !window.confirm(t.confirmReset)) return;
     setPlaying(false);
     const def = getDefaultScore(t);
-    setScoreText(def);
+    setScores([def]);
+    setActiveScore(0);
     try {
       const p = parseScore(def, t);
       setParsed(p); setParseError(''); setParseWarnings(p.warnings || []);
@@ -733,6 +746,48 @@ export default function Metronome() {
   }
 
   // ── Parse handlers ─────────────────────────────────────────────────────────
+
+  // Adopt a score as the one being played: parse it, and put the cursor and
+  // loop back to the top. Any existing sequence belongs to the old text.
+  function applyScore(text) {
+    try {
+      const parsedNext = parseScore(text, t);
+      setParsed(parsedNext);
+      setParseError('');
+      setParseWarnings(parsedNext.warnings || []);
+    } catch (e) { setParseError(e.message); }
+    setStartMeasure(1); setPreviewMeasure(1);
+    setLoopStart(null); setLoopEnd(null);
+  }
+
+  function selectScore(i) {
+    if (i === activeScore) return;
+    setPlaying(false);
+    setActiveScore(i);
+    applyScore(scores[i] ?? '');
+  }
+
+  function addScore() {
+    const next = [...scores, getDefaultScore(t)];
+    setPlaying(false);
+    setScores(next);
+    setActiveScore(next.length - 1);
+    applyScore(next[next.length - 1]);
+  }
+
+  // Deleting is destructive and the list persists, so it asks first. Removing
+  // the last one leaves a single default rather than an empty list.
+  function deleteScore() {
+    if (typeof window !== 'undefined' && !window.confirm(t.confirmDeleteScore)) return;
+    const next = scores.filter((_, i) => i !== activeScore);
+    const list = next.length ? next : [getDefaultScore(t)];
+    const idx  = Math.min(activeScore, list.length - 1);
+    setPlaying(false);
+    setScores(list);
+    setActiveScore(idx);
+    applyScore(list[idx]);
+  }
+
   function handleParse() {
     try {
       const p = parseScore(scoreText, t);
@@ -1011,6 +1066,8 @@ export default function Metronome() {
       onClearPasteParse={handleClearPasteParse}
       onClose={() => setShowScore(false)}
       onShowScoreHelp={() => setShowScoreHelp(true)}
+      scores={scores} activeScore={activeScore}
+      onSelectScore={selectScore} onAddScore={addScore} onDeleteScore={deleteScore}
       scoreWidth={scoreWidth}
     />
   );

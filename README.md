@@ -315,9 +315,31 @@ the ordinary way to write a piece that repeats from the top.
   you turn compensation off — distinct from ↺, which resumes tracking
 - **☀ / 🌙** — toggle between dark and daylight colour palettes
 
+### Several scores
+
+The score panel holds a list of scores, one active at a time, chosen from the
+selector in its header. **+** adds one, **✕** deletes the current one after
+confirming.
+
+A score names itself from its first header comment, so a file beginning
+
+```
+# II. BATTLE OF TITANS
+```
+
+appears in the selector as *II. BATTLE OF TITANS*. Only comments above the
+first measure line count — a comment further down annotates a passage rather
+than naming the piece. A score with no such header is listed as *Score 2* and
+so on. There is no rename: the label lives in the text, so it travels with the
+score through copy, paste and export.
+
+Entries stay in the order they were added. Switching scores stops playback and
+returns the cursor and loop to the top, since the sequence belongs to the text
+being left.
+
 ### Saved state and reset
 
-The score and every control setting — theme, subdivision, tempo scale, BT
+The scores and every control setting — theme, subdivision, tempo scale, BT
 offset, count-in, and the width of the score panel — are kept in the browser
 and restored on the next visit. Nothing leaves the machine; it is all
 `localStorage`, per browser and per device.
@@ -328,7 +350,8 @@ editor and reloading brings the default score back rather than an empty box.
 
 To start over, use the **♩ METRONOMICON** title in the header: click it on a
 desktop, or press and hold it for about a second on a touchscreen. It asks for
-confirmation, then returns the score and all settings to their defaults. The
+confirmation, then discards **every** score and returns all settings to their
+defaults. The
 interface language is not affected — that has its own control and its own
 saved setting.
 
@@ -416,7 +439,7 @@ src/
   beatModel.js       beat patterns, tempo math (pure functions)
   timeline.js        timeline event list, loop seq bounds
   constants.js       palettes, subdivision options, example scores
-  storage.js         score and settings persistence (localStorage)
+  storage.js         score list and settings persistence (localStorage)
   Metronome.jsx      top-level component: all state, scheduler, layout
   main.jsx           React entry point
   components/

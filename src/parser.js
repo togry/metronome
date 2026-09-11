@@ -115,6 +115,26 @@ export function splitComment(line) {
   return m ? [line.slice(0, m.index), line.slice(m.index)] : [line, ''];
 }
 
+// A score names itself: the first comment line with any letters or digits in
+// it. Decorative rules of box characters are skipped, so a header like
+//   # ─────────────
+//   # IV. JOURNEY TO UTNAPISHIM
+// yields "IV. JOURNEY TO UTNAPISHIM". Returns null when the score has no such
+// header, for the caller to number instead. Deriving the label rather than
+// storing it means it travels with the text through copy, paste and export.
+export function scoreLabel(text) {
+  for (const raw of String(text ?? '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    // Only the header block counts. A comment further down is an annotation on
+    // a passage, not a title for the piece.
+    if (!line.startsWith('#') && !line.startsWith('//')) break;
+    const body = line.replace(/^(#+|\/\/)\s*/, '').trim();
+    if (/[\p{L}\p{N}]/u.test(body)) return body;
+  }
+  return null;
+}
+
 // Upper bound on measure numbers. The forward pass walks every measure from 1
 // to the last one mentioned, so a mistyped '1000000||' costs ~190MB and a
 // frozen tab. No real piece comes close — a Mahler symphony is around a

@@ -5,7 +5,7 @@
 // privacy modes, and setItem throws when the quota is full. Losing a save is
 // never worth breaking the app over, so failures are silent and non-fatal.
 
-const SCORE_KEY    = 'metronomicon_score';
+const SCORES_KEY   = 'metronomicon_scores';
 const SETTINGS_KEY = 'metronomicon_settings';
 
 // Reading the global can itself throw when site data is blocked, so even the
@@ -18,25 +18,29 @@ function storage() {
   }
 }
 
-// Returns the saved score, or null when there is nothing usable to restore.
-// A blank saved score counts as nothing — booting into an empty editor is
-// more confusing than booting into the default.
-export function loadScore() {
+// The score list, newest storage shape. Always returns an array; an empty one
+// means "nothing to restore", and the caller supplies the default score.
+// Entries that are blank are dropped — booting into an empty editor is more
+// confusing than booting into the default.
+export function loadScores() {
   try {
-    const text = storage()?.getItem(SCORE_KEY);
-    return text && text.trim() ? text : null;
+    const raw = storage()?.getItem(SCORES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(x => typeof x === 'string' && x.trim());
   } catch {
-    return null;
+    return [];
   }
 }
 
-// Returns true if the score was stored, false if persistence is unavailable.
-export function saveScore(text) {
+export function saveScores(scores) {
   const s = storage();
   if (!s) return false;
   try {
-    if (text && text.trim()) s.setItem(SCORE_KEY, text);
-    else s.removeItem(SCORE_KEY);
+    const keep = (scores || []).filter(x => typeof x === 'string' && x.trim());
+    if (keep.length) s.setItem(SCORES_KEY, JSON.stringify(keep));
+    else s.removeItem(SCORES_KEY);
     return true;
   } catch {
     return false;

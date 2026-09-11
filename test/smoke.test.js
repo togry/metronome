@@ -47,9 +47,9 @@ describe('app renders', () => {
     assert.match(html, /METRONOMICON/);
   });
 
-  test('with a saved score', () => {
+  test('with a saved score list', () => {
     globalThis.localStorage = fakeStorage({
-      metronomicon_score: '1| 7/8 (2+2+3) 1/4=90\n8||',
+      metronomicon_scores: JSON.stringify(['# One\n1| 7/8 (2+2+3) 1/4=90\n8||', '# Two\n1| 4/4']),
     });
     try {
       assert.match(renderToString(React.createElement(Metronome)), /METRONOMICON/);
@@ -61,8 +61,9 @@ describe('app renders', () => {
   test('with a saved score that does not parse', () => {
     // A score stored under a syntax that later changes must not be able to take
     // the app down on boot — that would leave no way to reach the editor to fix it.
+    // Out-of-order measures now throw, so this covers that path too.
     globalThis.localStorage = fakeStorage({
-      metronomicon_score: '((( not a score at all ]]]',
+      metronomicon_scores: JSON.stringify(['9| 4/4\n1| 3/4']),
     });
     try {
       assert.match(renderToString(React.createElement(Metronome)), /METRONOMICON/);

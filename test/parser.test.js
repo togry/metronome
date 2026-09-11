@@ -13,7 +13,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseScore, splitComment } from '../src/parser.js';
+import { parseScore, splitComment, scoreLabel } from '../src/parser.js';
 
 const parse = text => parseScore(text);
 const seqOf = text => parseScore(text).seq;
@@ -764,5 +764,36 @@ describe('splitComment', () => {
       const [code] = splitComment(line);
       assert.deepEqual(parse(line).ignored, parse(code).ignored, line);
     }
+  });
+});
+
+describe('scoreLabel', () => {
+  const NL = String.fromCharCode(10);
+
+  test('takes the first header comment', () => {
+    assert.equal(scoreLabel(['# II. BATTLE OF TITANS', '1| 7/8 (2+2+3)'].join(NL)),
+      'II. BATTLE OF TITANS');
+  });
+
+  test('skips decorative rules with no letters or digits', () => {
+    assert.equal(scoreLabel(['# ─────────────', '# IV. JOURNEY', '1| 4/4'].join(NL)), 'IV. JOURNEY');
+  });
+
+  test('accepts // as well as #', () => {
+    assert.equal(scoreLabel(['// Practice', '1| 4/4'].join(NL)), 'Practice');
+  });
+
+  test('only the header block counts', () => {
+    // A comment further down annotates a passage; it is not a title.
+    assert.equal(scoreLabel(['1| 4/4', '# patterns with rests', '5| 3/4'].join(NL)), null);
+  });
+
+  test('a score with no header is unnamed, for the caller to number', () => {
+    assert.equal(scoreLabel('1| 4/4 1/4=90'), null);
+    assert.equal(scoreLabel(''), null);
+  });
+
+  test('tuplet brackets are not mistaken for a title', () => {
+    assert.equal(scoreLabel('1: 4/4 1/4=90' + NL + '3: (1+1+[3:111])'), null);
   });
 });
