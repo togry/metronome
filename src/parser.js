@@ -107,6 +107,14 @@ function isValidGroupElement(g) {
   return Number.isInteger(g) && g > 0;
 }
 
+// Split a line into its code part and its comment, mirroring the strip that
+// parseScore applies. Exported so the editor and the help examples shade
+// comments by the same rule the parser discards them by.
+export function splitComment(line) {
+  const m = line.match(/(\/\/|#)/);
+  return m ? [line.slice(0, m.index), line.slice(m.index)] : [line, ''];
+}
+
 // Upper bound on measure numbers. The forward pass walks every measure from 1
 // to the last one mentioned, so a mistyped '1000000||' costs ~190MB and a
 // frozen tab. No real piece comes close — a Mahler symphony is around a

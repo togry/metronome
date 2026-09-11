@@ -9,12 +9,12 @@
 // (whiteSpace: 'pre'), only scroll position.
 
 import { useMemo, useRef } from 'react';
-import { parseScore } from '../parser.js';
+import { parseScore, splitComment } from '../parser.js';
 
 export default function ScorePanel({
   C, mobile, scoreText, setScoreText,
   parseError, parseWarnings,
-  onParse, onClearPasteParse, onClose,
+  onParse, onClearPasteParse, onClose, onShowScoreHelp,
   scoreWidth, t,
 }) {
   const overlayRef = useRef(null);
@@ -53,10 +53,8 @@ export default function ScorePanel({
   const marked = scoreText.split('\n').map((ln, i) => {
     // Split the comment off first, so ignored fragments are located in the
     // code part only and cannot match text inside a comment.
-    const cm      = ln.match(/(\/\/|#)/);
-    const code    = cm ? ln.slice(0, cm.index) : ln;
-    const comment = cm ? ln.slice(cm.index)    : '';
-    const frags   = byLine.get(i) || [];
+    const [code, comment] = splitComment(ln);
+    const frags = byLine.get(i) || [];
 
     const out = [];
     let cursor = 0;
@@ -102,13 +100,20 @@ export default function ScorePanel({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 9, letterSpacing: 3, color: C.textFaint }}>{t.btnScore}</div>
-        {mobile && (
-          <button onClick={onClose} style={{
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={onShowScoreHelp} title={t.btnScoreHelpTitle} style={{
             background: 'transparent', border: `1px solid ${C.border}`,
-            color: C.textDim, padding: '4px 10px', cursor: 'pointer',
-            borderRadius: 3, fontSize: 12,
-          }}>{t.helpClose} {t.btnScore}</button>
-        )}
+            color: C.gold, padding: mobile ? '4px 10px' : '2px 8px',
+            cursor: 'pointer', borderRadius: 3, fontSize: 12, lineHeight: 1.2,
+          }}>{t.btnHelp}</button>
+          {mobile && (
+            <button onClick={onClose} style={{
+              background: 'transparent', border: `1px solid ${C.border}`,
+              color: C.textDim, padding: '4px 10px', cursor: 'pointer',
+              borderRadius: 3, fontSize: 12,
+            }}>{t.helpClose} {t.btnScore}</button>
+          )}
+        </div>
       </div>
 
       <div style={{

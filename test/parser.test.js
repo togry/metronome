@@ -13,7 +13,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseScore } from '../src/parser.js';
+import { parseScore, splitComment } from '../src/parser.js';
 
 const parse = text => parseScore(text);
 const seqOf = text => parseScore(text).seq;
@@ -727,5 +727,29 @@ describe('alternating groupings', () => {
     assert.deepEqual(g[1], [3, 2]);
     assert.equal(g[2], null);
     assert.equal(g[3], null);
+  });
+});
+
+describe('splitComment', () => {
+  test('splits at the comment marker, keeping it with the comment', () => {
+    assert.deepEqual(splitComment('9| 7/8 (223)  # odd meter'), ['9| 7/8 (223)  ', '# odd meter']);
+    assert.deepEqual(splitComment('5: (1+1) // aside'),          ['5: (1+1) ',      '// aside']);
+  });
+
+  test('a whole-line comment has no code part', () => {
+    assert.deepEqual(splitComment('# heading'), ['', '# heading']);
+  });
+
+  test('a line with no comment is returned whole', () => {
+    assert.deepEqual(splitComment('1| 4/4 1/4=90'), ['1| 4/4 1/4=90', '']);
+  });
+
+  test('the split agrees with what the parser discards', () => {
+    // Whatever splitComment calls a comment must be exactly what the parser
+    // ignores — otherwise the editor shades one thing and the parser reads another.
+    for (const line of ['1| 4/4 # note', '1| 4/4 // note', '# all', '1| 4/4']) {
+      const [code] = splitComment(line);
+      assert.deepEqual(parse(line).ignored, parse(code).ignored, line);
+    }
   });
 });

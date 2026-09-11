@@ -1,5 +1,7 @@
 // ─── Help modal ───────────────────────────────────────────────────────────────
 
+import { splitComment } from '../parser.js';
+
 const EXAMPLE_KEYS = {
   practice:  'defaultScore',
   structure: 'exampleStructure',
@@ -7,7 +9,8 @@ const EXAMPLE_KEYS = {
   tuplet:    'exampleTuplet',
 };
 
-export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
+export default function HelpModal({ C, onClose, onRunExample, mobile, t, sections, title }) {
+  const shown = sections ?? t.helpSections;
   return (
     <div
       onClick={onClose}
@@ -31,7 +34,7 @@ export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 15, color: C.gold, letterSpacing: 3, fontWeight: 'bold' }}>{t.helpTitle}</div>
+          <div style={{ fontSize: 15, color: C.gold, letterSpacing: 3, fontWeight: 'bold' }}>{title ?? t.helpTitle}</div>
           <button onClick={onClose} style={{
             background: 'transparent', border: `1px solid ${C.border}`,
             color: C.textDim, borderRadius: 4, padding: '4px 10px',
@@ -39,7 +42,7 @@ export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
           }}>{t.helpClose}</button>
         </div>
 
-        {t.helpSections.map(({ h, body, exampleKey }) => {
+        {shown.map(({ h, body, exampleKey }) => {
           const example = exampleKey ? t[EXAMPLE_KEYS[exampleKey]] ?? null : null;
           return (
             <div key={h} style={{ marginBottom: 16 }}>
@@ -79,7 +82,20 @@ export default function HelpModal({ C, onClose, onRunExample, mobile, t }) {
                       }}
                     >{t.helpBtnCopy}</button>
                   </div>
-                  <pre style={{ margin: 0, fontSize: 11, color: C.code, fontFamily: 'monospace', lineHeight: 1.7, whiteSpace: 'pre', paddingRight: 52 }}>{example}</pre>
+                  {/* Comments carry the same shade as in the score editor, so
+                      the examples read the way the editor will show them. */}
+                  <pre style={{ margin: 0, fontSize: 11, color: C.code, fontFamily: 'monospace', lineHeight: 1.7, whiteSpace: 'pre', paddingRight: 52 }}>
+                    {example.split('\n').map((ln, li) => {
+                      const [code, comment] = splitComment(ln);
+                      return (
+                        <span key={li}>
+                          {code}
+                          {comment && <span style={{ background: C.commentBg, borderRadius: 2 }}>{comment}</span>}
+                          {'\n'}
+                        </span>
+                      );
+                    })}
+                  </pre>
                 </div>
               )}
             </div>

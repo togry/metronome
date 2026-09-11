@@ -94,7 +94,8 @@ rehearsal mark with that number as the label:
 ### Time signatures
 
 Standard signatures like `4/4`, `3/4`, `6/8`, `2/2` work as expected.
-For compound meters (6/8, 12/8) the primary beat is the dotted quarter automatically.
+For compound meters (6/8, 9/8, 12/8) the primary beat is the dotted quarter
+automatically.
 
 ### Groupings
 

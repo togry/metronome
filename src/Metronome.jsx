@@ -183,6 +183,7 @@ export default function Metronome() {
 
   // ── UI ─────────────────────────────────────────────────────────────────────
   const [showHelp,  setShowHelp]  = useState(false);
+  const [showScoreHelp, setShowScoreHelp] = useState(false);
   const [winWidth,  setWinWidth]  = useState(typeof window !== 'undefined' ? window.innerWidth  : 800);
   const [winHeight, setWinHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 600);
 
@@ -1003,6 +1004,7 @@ export default function Metronome() {
       onParse={() => { handleParse(); if (mobile) setShowScore(false); }}
       onClearPasteParse={handleClearPasteParse}
       onClose={() => setShowScore(false)}
+      onShowScoreHelp={() => setShowScoreHelp(true)}
       scoreWidth={scoreWidth}
     />
   );
@@ -1148,6 +1150,12 @@ export default function Metronome() {
       {/* Help modal */}
       {showHelp && (
         <HelpModal C={C} mobile={mobile} t={t} onClose={() => setShowHelp(false)} onRunExample={handleRunExample} />
+      )}
+      {showScoreHelp && (
+        <HelpModal C={C} mobile={mobile} t={t}
+          sections={t.scoreHelpSections} title={t.scoreHelpTitle}
+          onClose={() => setShowScoreHelp(false)}
+          onRunExample={ex => { handleRunExample(ex); setShowScoreHelp(false); }} />
       )}
 
       {/* ── Body ── */}
