@@ -77,11 +77,24 @@ describe('basics', () => {
     assert.equal(measures[3].numerator, 3);
   });
 
-  test('lines may be given out of order', () => {
-    const { measures, endAt } = parse('5| 3/4\n1| 4/4 1/4=90');
-    assert.equal(endAt, 5);
-    assert.equal(measures[1].numerator, 4);
-    assert.equal(measures[5].numerator, 3);
+  test('lines must be given in order', () => {
+    // Previously these were silently sorted into place, which hid genuine
+    // transpositions and let several movements each numbered from 1 collapse
+    // into one interleaved score without complaint.
+    assert.throws(() => parse('5| 3/4\n1| 4/4 1/4=90'), /must increase/);
+  });
+
+  test('a repeated measure number is rejected', () => {
+    assert.throws(() => parse('1| 4/4 1/4=90\n3| 3/4\n1| 7/8'), /must increase/);
+  });
+
+  test('the error names the line and both measures', () => {
+    assert.throws(() => parse('1| 4/4\n164| 3/4\n162| 2/4'),
+      /line 3: m\.162 comes after m\.164/);
+  });
+
+  test('comments and blank lines do not affect the line count', () => {
+    assert.throws(() => parse('# note\n\n1| 4/4\n\n9| 3/4\n5| 2/4'), /line 6/);
   });
 
   test('unparseable lines are skipped', () => {

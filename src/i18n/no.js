@@ -110,6 +110,8 @@ const no = {
 36||                  # slutt på stykke`,
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
+  errMeasureOrder: (line, mn, prev) =>
+    `linje ${line}: t.${mn} kommer etter t.${prev} \u2014 taktnumrene m\u00E5 \u00F8ke nedover i partituret`,
   errTooManyMeasures: (mn, max) =>
     `t.${mn}: taktnummeret overstiger grensen på ${max} — se etter en skrivefeil`,
   warnGroupingInvalid: (mn) =>

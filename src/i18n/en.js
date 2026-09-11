@@ -114,6 +114,8 @@ const en = {
 
   // ── Parser warnings / errors ─────────────────────────────────────────────────
   // These are parameterised; keep the function signatures intact.
+  errMeasureOrder: (line, mn, prev) =>
+    `line ${line}: m.${mn} comes after m.${prev} \u2014 measure numbers must increase down the score`,
   errTooManyMeasures: (mn, max) =>
     `m.${mn}: measure number exceeds the limit of ${max} — check for a typo`,
   warnGroupingInvalid: (mn) =>

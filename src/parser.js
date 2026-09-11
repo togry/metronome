@@ -132,6 +132,12 @@ export function parseScore(text, t) {
   const ignored = [];
 
   const rawEvents = [];
+  // Measure numbers must increase strictly down the score. Out-of-order or
+  // repeated numbers were silently sorted into place before, which hid genuine
+  // transpositions and let a document with several movements — each numbered
+  // from 1 — collapse into one interleaved mess without a word of complaint.
+  // (When parts arrive, this resets at each part boundary rather than per file.)
+  let prevMeasure = 0;
 
   for (let li = 0; li < srcLines.length; li++) {
     const line = srcLines[li].replace(/\s*(\/\/|#).*$/, '').trim();
@@ -145,6 +151,12 @@ export function parseScore(text, t) {
     const lineIgnored = [];
     const bracketed = m[1] === '[' && m[3] === ']';
     const measure   = parseInt(m[2]);
+    if (measure <= prevMeasure) {
+      throw new Error(t
+        ? t.errMeasureOrder(li + 1, measure, prevMeasure)
+        : `line ${li + 1}: m.${measure} comes after m.${prevMeasure} — measure numbers must increase down the score`);
+    }
+    prevMeasure = measure;
     const sep       = m[4];
     const rest      = m[5].trim();
     const ev        = { measure, sep };
@@ -241,8 +253,6 @@ export function parseScore(text, t) {
 
     rawEvents.push(ev);
   }
-
-  rawEvents.sort((a, b) => a.measure - b.measure);
 
   const changes    = {};
   const barlines   = {};
