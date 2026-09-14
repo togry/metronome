@@ -119,6 +119,12 @@ const no = {
     `linje ${line}: t.${mn} kommer etter t.${prev} \u2014 taktnumrene m\u00E5 \u00F8ke nedover i partituret`,
   errTooManyMeasures: (mn, max) =>
     `t.${mn}: taktnummeret overstiger grensen på ${max} — se etter en skrivefeil`,
+  errTickTooShort:
+    'Avspillingen stoppet — partituret ber om et slag som er for kort til å spilles. Sjekk tempoet og taktarten.',
+  warnTimeSigOutOfRange: (mn, num, den, maxNum, maxDen) =>
+    `t.${mn}: taktarten ${num}/${den} er utenfor gyldig område — takten må ligge mellom 1/1 og ${maxNum}/${maxDen}; ignorert`,
+  warnTempoOutOfRange: (mn, denom, bpm, maxDen, maxBpm) =>
+    `t.${mn}: tempoet 1/${denom}=${bpm} er utenfor gyldig område — noteverdien må være 1..${maxDen} og hastigheten 1..${maxBpm} BPM; ignorert`,
   warnGroupingInvalid: (mn) =>
     `t.${mn}: ugyldig gruppering — sifrene i en tuplett må summere til div; gruppering ignorert`,
   warnGroupingNotDivisible: (mn, units, num, den) =>

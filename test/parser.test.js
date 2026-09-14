@@ -611,6 +611,64 @@ describe('measure-number cap', () => {
   });
 });
 
+// ─── Tempo and meter bounds ───────────────────────────────────────────────────
+//
+// Every number here ends up dividing or multiplying a tick duration, and the
+// scheduler advances its clock by that duration in a loop. A zero or a wild
+// value does not merely sound wrong: it stalls or spins that loop with the
+// main thread held, and a meter of 900 million allocates a beat array to
+// match. Unlike a mistyped measure number, a bad field here is local — the
+// field is dropped with a warning and the rest of the score still plays.
+
+describe('tempo and meter bounds', () => {
+  test('a zero tempo denominator is rejected, not left to divide by zero', () => {
+    const { measures, warnings } = parse('1| 4/4 1/0=90');
+    assert.equal(measures[1].tempoDenom, 4);   // default kept, mark dropped
+    assert.equal(measures[1].tempoBPM, 120);
+    assert.match(warnings.join(' '), /tempo/i);
+  });
+
+  test('an out-of-range tempo denominator is rejected', () => {
+    const { measures, warnings } = parse('1| 4/4 1/1000000=90');
+    assert.equal(measures[1].tempoDenom, 4);
+    assert.match(warnings.join(' '), /tempo/i);
+  });
+
+  test('an absurd BPM is rejected', () => {
+    const { measures, warnings } = parse('1| 4/4 1/4=999999999');
+    assert.equal(measures[1].tempoBPM, 120);
+    assert.match(warnings.join(' '), /tempo/i);
+  });
+
+  test('an absurd meter numerator is rejected before it allocates', () => {
+    const { measures, warnings } = parse('1| 900000000/4 1/4=90');
+    assert.equal(measures[1].numerator, 4);
+    assert.equal(measures[1].denominator, 4);
+    assert.match(warnings.join(' '), /time signature/i);
+  });
+
+  test('an absurd meter denominator is rejected', () => {
+    const { measures, warnings } = parse('1| 4/1000000000 1/4=90');
+    assert.equal(measures[1].denominator, 4);
+    assert.match(warnings.join(' '), /time signature/i);
+  });
+
+  test('a rit target tempo is bounded too', () => {
+    const { measures, warnings } = parse('1| 4/4 1/4=90 rit 1/0=60\n4| 1/4=60\n8||');
+    // The bad target is dropped, so the rit falls back to the following mark.
+    assert.equal(measures[1].ritAccelSpan.targetBPM, 60);
+    assert.match(warnings.join(' '), /tempo/i);
+  });
+
+  test('legitimate extremes still parse', () => {
+    assert.equal(parse('1| 7/8 1/8=200').measures[1].numerator, 7);
+    assert.equal(parse('1| 12/8 1/8.=60').measures[1].tempoBPM, 60);
+    assert.equal(parse('1| 2/2 1/2=40').measures[1].denominator, 2);
+    assert.equal(parse('1| 32/32 1/32=300').measures[1].numerator, 32);
+    assert.deepEqual(parse('1| 4/4 1/4=90').warnings, []);
+  });
+});
+
 describe('ignored text on both sides of a field', () => {
   const NL = String.fromCharCode(10);
 

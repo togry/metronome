@@ -104,6 +104,27 @@ export function groupingFullLabel(groups) {
     return `${g.units > 1 ? g.units : ''}[${g.div}:${slotsStr}]`;
   }).join('+');
 }
+// Shortest tick the scheduler will act on. The scheduler fills a lookahead
+// window by advancing a clock by one tick duration at a time, so a duration of
+// zero never advances it and a negative one walks it backwards — either way
+// the loop does not terminate, with the main thread held and an oscillator
+// allocated per turn. The parser's bounds keep those values out, but the
+// duration also depends on tempoScale, which is restored from localStorage and
+// so is not the parser's to vouch for. This is the backstop that makes the
+// loop terminate for *any* input.
+//
+// The floor has to sit below anything the bounds legitimately allow. The
+// extreme there is a bar of 64ths marked 1/1=1000, which works out at ~0.94ms
+// a tick — not music, but reachable, so the floor goes under it. What it does
+// catch is the pathological: 0, NaN, a negative from a tampered tempoScale,
+// and the ~5e-8 a deeply nested tuplet can produce. Real music is nowhere
+// near — 32nds at crotchet=240 is 31ms, sixty times slower than this.
+// The call site pairs this with a finite check —
+// `!Number.isFinite(tickSec) || !(tickSec >= MIN_TICK_SEC)`. Both halves earn
+// their place: the negated form catches NaN and undefined, which would slip
+// past a plain `<`, and the finite check catches Infinity, which a tempoScale
+// of 0 produces and which clears any lower bound while leaving the clock just
+// as dead.export const MIN_TICK_SEC = 0.0005;
 export function oneDenomUnitSec(mState, tempoScale) {
   const { tempoBPM, tempoDenom, tempoDotted, denominator } = mState;
   const dotFactor = tempoDotted ? 1.5 : 1;

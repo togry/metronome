@@ -123,6 +123,12 @@ const en = {
     `line ${line}: m.${mn} comes after m.${prev} \u2014 measure numbers must increase down the score`,
   errTooManyMeasures: (mn, max) =>
     `m.${mn}: measure number exceeds the limit of ${max} — check for a typo`,
+  errTickTooShort:
+    'Playback stopped — this score asks for a beat too short to play. Check the tempo and time signature.',
+  warnTimeSigOutOfRange: (mn, num, den, maxNum, maxDen) =>
+    `m.${mn}: time signature ${num}/${den} is out of range — the meter must be between 1/1 and ${maxNum}/${maxDen}; ignored`,
+  warnTempoOutOfRange: (mn, denom, bpm, maxDen, maxBpm) =>
+    `m.${mn}: tempo 1/${denom}=${bpm} is out of range — the note value must be 1..${maxDen} and the rate 1..${maxBpm} BPM; ignored`,
   warnGroupingInvalid: (mn) =>
     `m.${mn}: malformed grouping — a tuplet's slots must sum to its divisor; grouping ignored`,
   warnGroupingNotDivisible: (mn, units, num, den) =>

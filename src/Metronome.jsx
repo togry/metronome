@@ -3,7 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 import { parseScore }                   from './parser.js';
-import { getBeatPattern, getPrimaryGroups, groupingShortLabel, groupingFullLabel, oneDenomUnitSec, tickDurationSec } from './beatModel.js';
+import { getBeatPattern, getPrimaryGroups, groupingShortLabel, groupingFullLabel, oneDenomUnitSec, tickDurationSec, MIN_TICK_SEC } from './beatModel.js';
+// The locale proxy under its own name: inside the scheduler `t` is the tick's
+// audio time, so the component's `t` is out of reach there.
+import { t as strings }             from './i18n/index.js';
 import { getTimelineEvents, computeLoopSeqBounds, timelineGeometry } from './timeline.js';
 import { SUBDIV_OPTIONS, PALETTES, DEFAULT_SCORE, RIT_EXAMPLE_SCORE } from './constants.js';
 import { getDefaultScore, getRitExampleScore, getTupletExampleScore, getStructureExampleScore } from './constants.js';
@@ -290,6 +293,16 @@ export default function Metronome() {
     // 150ms lookahead: long enough that the rAF-driven scheduler never falls behind.
     const scheduleUntil = ctx.currentTime + 0.15;
 
+    // Abandon playback on a tick the scheduler cannot honour. Stopping is the
+    // only safe move — carrying on would mean looping on a clock that does not
+    // advance — and it is reported through parseError so the reason appears
+    // next to the score rather than as silence.
+    const stopWithError = () => {
+      isPlayingRef.current = false;
+      setPlaying(false);
+      setParseError(strings.errTickTooShort);
+    };
+
     while (nextTickTimeRef.current < scheduleUntil) {
       const { seqIdx, tick } = posRef.current;
       const loopE = loopEndRef.current;
@@ -347,9 +360,26 @@ export default function Metronome() {
 
       const targetDenom = SUBDIV_OPTIONS[subdivIdxRef.current].targetDenom;
       const pattern     = getBeatPattern(mState, targetDenom);
+      if (!pattern.length) { stopWithError(); return; }
       const tickIdx     = tick % pattern.length;
       const tickData    = pattern[tickIdx];
       const t           = nextTickTimeRef.current;
+
+      const tickSec = tickData.durationUnits * tickDurationSec(mState, pattern, tickIdx, tempoScaleRef.current);
+
+      // This loop advances its own exit condition: it runs until nextTickTime
+      // reaches the end of the lookahead window, and the only thing that moves
+      // nextTickTime is the tick duration added at the bottom. A duration of
+      // zero therefore spins forever and a negative one runs away backwards,
+      // in both cases allocating an oscillator per turn with the main thread
+      // held — no repaint, no UI, nothing left to press. The parser's bounds
+      // keep such values out of a score, but tempoScale comes from
+      // localStorage and is not the parser's to vouch for, so the loop checks
+      // for itself before it commits to the turn. Tested as `!(x >= MIN)` so
+      // that NaN fails it too, and paired with a finite check because the
+      // other tampered value — a tempoScale of 0 — yields Infinity, which
+      // clears any lower bound while leaving the clock just as dead.
+      if (!Number.isFinite(tickSec) || !(tickSec >= MIN_TICK_SEC)) { stopWithError(); return; }
 
       // Audio — skipped for rest ticks
       if (tickData.weight > 0) {
@@ -371,8 +401,6 @@ export default function Metronome() {
         g.gain.exponentialRampToValueAtTime(0.001, tAudio + 0.05);
         osc.start(tAudio); osc.stop(tAudio + 0.07);
       }
-
-      const tickSec = tickData.durationUnits * tickDurationSec(mState, pattern, tickIdx, tempoScaleRef.current);
 
       // At the top of each bar, record when it starts and how long it runs, so
       // the playhead can interpolate across it. Summed from the same per-tick

@@ -141,6 +141,25 @@ export function scoreLabel(text) {
 // thousand bars — so past this it is a typo, and saying so beats hanging.
 export const MAX_MEASURES = 10000;
 
+// Bounds on the numbers inside a measure. Every one of these ends up in a tick
+// duration — meter and tempo denominators divide it, BPM divides it, and the
+// scheduler advances its clock by the result inside a `while` loop. A zero
+// denominator makes that duration 0 and the loop never advances; a BPM in the
+// billions makes it small enough that one 150ms lookahead window asks for
+// millions of oscillators. Either freezes the tab outright, with the main
+// thread held so there is no UI left to stop it. A numerator is the other
+// axis: getPrimaryGroups allocates one entry per unit, so 900000000/4 is an
+// out-of-memory crash before a note sounds.
+//
+// The limits are set well clear of real music — a 32/32 bar and a 1/64=300
+// marking both pass — so anything beyond them is a typo or a hostile paste.
+// Unlike a mistyped measure number, which makes the whole document
+// incoherent, a bad field here is local: it is dropped with a warning and the
+// rest of the score plays.
+export const MAX_NUMERATOR   = 128;   // units in a bar
+export const MAX_DENOM       = 64;    // note value, meter and tempo alike
+export const MAX_BPM         = 1000;  // prestissimo is around 200
+
 // SEP_RE: optional bracket open, digits, optional bracket close, separator, rest
 const SEP_RE = /^(\[?)(\d+)(\]?)\s*(\|:\||:\|\||\|\|:|\|:|:\||\|\||[:|])\s*(.*)$/;
 
@@ -281,6 +300,15 @@ export function parseScore(text, t) {
   const codaJumps  = {};
   let lastDoublebar = null;
 
+  // Declared here rather than after this loop because the bounds checks below
+  // report through it.
+  const warnings = [];
+
+  // A field is usable only if it is a whole number inside its range. The zero
+  // case matters as much as the huge one: it is what a bare '1/0=90' produces,
+  // and it divides straight into a tick duration.
+  const inRange = (v, max) => Number.isInteger(v) && v >= 1 && v <= max;
+
   for (const ev of rawEvents) {
     const mn = ev.measure;
     barlines[mn] = ev.sep;
@@ -290,20 +318,44 @@ export function parseScore(text, t) {
     if (ev.sep === '||' || ev.sep === ':||' || ev.sep === '||:') lastDoublebar = mn;
     if (!changes[mn]) changes[mn] = {};
     if (ev.rehearsal)   changes[mn].rehearsal   = ev.rehearsal;
-    if (ev.numerator)   changes[mn].numerator   = ev.numerator;
-    if (ev.denominator) changes[mn].denominator = ev.denominator;
+    // A time signature applies whole or not at all: half of one — a numerator
+    // taken while its denominator was refused — is a meter nobody wrote.
+    if (ev.numerator || ev.denominator) {
+      if (inRange(ev.numerator, MAX_NUMERATOR) && inRange(ev.denominator, MAX_DENOM)) {
+        changes[mn].numerator   = ev.numerator;
+        changes[mn].denominator = ev.denominator;
+      } else {
+        warnings.push(t
+          ? t.warnTimeSigOutOfRange(mn, ev.numerator, ev.denominator, MAX_NUMERATOR, MAX_DENOM)
+          : `m.${mn}: time signature ${ev.numerator}/${ev.denominator} is out of range — the meter must be between 1/1 and ${MAX_NUMERATOR}/${MAX_DENOM}; ignored`);
+      }
+    }
     if (ev.groupingCycle) changes[mn].groupingCycle = ev.groupingCycle;
     if (ev.tempoBPM) {
-      changes[mn].tempoDenom  = ev.tempoDenom;
-      changes[mn].tempoDotted = ev.tempoDotted || false;
-      changes[mn].tempoBPM    = ev.tempoBPM;
+      if (inRange(ev.tempoDenom, MAX_DENOM) && inRange(ev.tempoBPM, MAX_BPM)) {
+        changes[mn].tempoDenom  = ev.tempoDenom;
+        changes[mn].tempoDotted = ev.tempoDotted || false;
+        changes[mn].tempoBPM    = ev.tempoBPM;
+      } else {
+        warnings.push(t
+          ? t.warnTempoOutOfRange(mn, ev.tempoDenom, ev.tempoBPM, MAX_DENOM, MAX_BPM)
+          : `m.${mn}: tempo 1/${ev.tempoDenom}=${ev.tempoBPM} is out of range — the note value must be 1..${MAX_DENOM} and the rate 1..${MAX_BPM} BPM; ignored`);
+      }
     }
     if (ev.ritKind) {
       changes[mn].ritKind = ev.ritKind;
       if (ev.ritTargetBPM) {
-        changes[mn].ritTargetBPM    = ev.ritTargetBPM;
-        changes[mn].ritTargetDenom  = ev.ritTargetDenom;
-        changes[mn].ritTargetDotted = ev.ritTargetDotted;
+        // Dropping only the target leaves the rit itself standing, so it can
+        // still take its target from the next tempo mark in the score.
+        if (inRange(ev.ritTargetDenom, MAX_DENOM) && inRange(ev.ritTargetBPM, MAX_BPM)) {
+          changes[mn].ritTargetBPM    = ev.ritTargetBPM;
+          changes[mn].ritTargetDenom  = ev.ritTargetDenom;
+          changes[mn].ritTargetDotted = ev.ritTargetDotted;
+        } else {
+          warnings.push(t
+            ? t.warnTempoOutOfRange(mn, ev.ritTargetDenom, ev.ritTargetBPM, MAX_DENOM, MAX_BPM)
+            : `m.${mn}: tempo 1/${ev.ritTargetDenom}=${ev.ritTargetBPM} is out of range — the note value must be 1..${MAX_DENOM} and the rate 1..${MAX_BPM} BPM; ignored`);
+        }
       }
     }
     if (ev.atempo) changes[mn].atempo = true;
@@ -324,8 +376,6 @@ export function parseScore(text, t) {
   // Clear any auto-rehearsal that was set solely because of the || rule.
   if (!noExplicitEnd && changes[endAt] && changes[endAt].rehearsal === String(endAt))
     delete changes[endAt].rehearsal;
-
-  const warnings = [];
 
   // ── Forward pass: build measures[] ──────────────────────────────────────────
   let state = { numerator: 4, denominator: 4, grouping: null, cycle: null, cycleStart: 1, tempoDenom: 4, tempoDotted: false, tempoBPM: 120 };

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import {
   getPrimaryGroups, getBeatPattern, groupUnits,
   groupingShortLabel, groupingFullLabel,
-  oneDenomUnitSec, tickDurationSec,
+  oneDenomUnitSec, tickDurationSec, MIN_TICK_SEC,
 } from '../src/beatModel.js';
 import { parseScore } from '../src/parser.js';
 
@@ -263,5 +263,55 @@ describe('tempo arithmetic', () => {
     const p3 = getBeatPattern(m3, 0);
     assert.equal(m3.ritAccelOffset, 4);
     assert.equal(tickDurationSec(m3, p3, 0, 1), 0.75);   // halfway through an 8-unit span
+  });
+});
+
+// ─── The scheduler's floor ────────────────────────────────────────────────────
+//
+// The scheduler advances its clock by one tick duration per turn and loops
+// until it reaches the end of its lookahead window, so a duration of zero or
+// less never terminates. It refuses any tick below MIN_TICK_SEC for that
+// reason. These cover both sides of that floor: real music must clear it, and
+// the values that would spin the loop must not.
+
+describe('minimum tick duration', () => {
+  // Mirrors the scheduler's own test, NaN and Infinity and all.
+  const playable = sec => Number.isFinite(sec) && sec >= MIN_TICK_SEC;
+
+  const tickOf = (text, subdiv = 0, scale = 1) => {
+    const m = measure(text);
+    const p = getBeatPattern(m, subdiv);
+    return p[0].durationUnits * tickDurationSec(m, p, 0, scale);
+  };
+
+  test('real music clears the floor with room to spare', () => {
+    assert.ok(playable(tickOf('1| 4/4 1/4=90')));
+    assert.ok(playable(tickOf('1| 4/4 1/4=240', 32)));   // 32nds at crotchet=240
+    assert.ok(playable(tickOf('1| 12/8 1/8=200', 16)));
+    assert.ok(playable(tickOf('1| 7/8 (223) 1/8=300', 32)));
+    assert.ok(playable(tickOf('1| 4/4 1/4=200', 32, 0.1)));  // slowest tempoScale
+  });
+
+  test('the fastest tempo the parser allows is still playable', () => {
+    // The bounds and the floor have to agree: nothing the parser lets through
+    // should be refused by the scheduler.
+    assert.ok(playable(tickOf('1| 64/64 1/1=1000', 32)));
+    assert.ok(playable(tickOf('1| 128/64 1/1=1000', 32, 1.5)));
+  });
+
+  test('a stalled or runaway clock is refused', () => {
+    assert.ok(!playable(0));          // 1/0=90 before the parser caught it
+    assert.ok(!playable(-0.667));     // a negative tempoScale from storage
+    assert.ok(!playable(NaN));        // must fail, not slip past a `<`
+    assert.ok(!playable(undefined));
+    assert.ok(!playable(6e-8));       // 1/4=999999999
+    assert.ok(!playable(Infinity));   // clears a lower bound, still no clock
+  });
+
+  test('a tampered tempoScale cannot produce a usable tick', () => {
+    // tempoScale is restored from localStorage, which the parser never sees.
+    assert.equal(tickOf('1| 4/4 1/4=90', 0, 0), Infinity);
+    assert.ok(!playable(tickOf('1| 4/4 1/4=90', 0, 0)));
+    assert.ok(!playable(tickOf('1| 4/4 1/4=90', 0, -1)));
   });
 });
