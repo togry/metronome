@@ -88,6 +88,60 @@ describe('settings persistence', () => {
     assert.equal(s.subdivIdx ?? 1, 1);   // caller's fallback still applies
   });
 
+  // ── Hostile settings ────────────────────────────────────────────────────────
+  //
+  // The UI constrains every one of these — a slider with a min and max, a
+  // <select> with three options — but localStorage is writable by anything
+  // sharing the origin, and on GitHub Pages a user site shares one origin with
+  // every other repo published under it. These values are not inert once
+  // restored: subdivIdx indexes an array without a bounds check, countInBeats
+  // bounds a loop that allocates an oscillator per turn, and tempoScale
+  // divides a tick duration. Out of range, they are dropped so the caller's
+  // own default applies.
+
+  test('an out-of-range subdivIdx is dropped rather than indexed', () => {
+    // SUBDIV_OPTIONS[99].targetDenom would throw inside the scheduler.
+    withStorage(fakeStorage({ metronomicon_settings: '{"subdivIdx":99}' }));
+    assert.deepEqual(loadSettings(), {});
+    withStorage(fakeStorage({ metronomicon_settings: '{"subdivIdx":-1}' }));
+    assert.deepEqual(loadSettings(), {});
+  });
+
+  test('a tempoScale that would stall or reverse the clock is dropped', () => {
+    for (const bad of ['0', '-100', '1e9', '"100"', 'null']) {
+      withStorage(fakeStorage({ metronomicon_settings: `{"tempoScale":${bad}}` }));
+      assert.deepEqual(loadSettings(), {}, `tempoScale ${bad} should be dropped`);
+    }
+  });
+
+  test('a countInBeats that would flood the count-in is dropped', () => {
+    withStorage(fakeStorage({ metronomicon_settings: '{"countInBeats":1000000000}' }));
+    assert.deepEqual(loadSettings(), {});
+  });
+
+  test('wrong types are dropped, including ones that coerce', () => {
+    withStorage(fakeStorage({ metronomicon_settings:
+      '{"theme":"neon","btUserSet":"yes","countInDenom":16,"scoreWidth":"300"}' }));
+    assert.deepEqual(loadSettings(), {});
+  });
+
+  test('a valid setting survives alongside a rejected one', () => {
+    // Rejecting the blob wholesale would lose good settings to one bad key.
+    withStorage(fakeStorage({ metronomicon_settings:
+      '{"theme":"light","subdivIdx":99,"tempoScale":80}' }));
+    assert.deepEqual(loadSettings(), { theme: 'light', tempoScale: 80 });
+  });
+
+  test('every legitimate value is preserved', () => {
+    const real = {
+      theme: 'light', subdivIdx: 0, tempoScale: 10, btLatency: 500,
+      btUserSet: true, countInEnabled: false, countInOnRepeat: true,
+      countInBeats: 2, countInDenom: 8, scoreWidth: 180.5, activeScore: 3,
+    };
+    withStorage(fakeStorage({ metronomicon_settings: JSON.stringify(real) }));
+    assert.deepEqual(loadSettings(), real);
+  });
+
   test('corrupt JSON is discarded', () => {
     withStorage(fakeStorage({ metronomicon_settings: '{not json' }));
     assert.deepEqual(loadSettings(), {});
