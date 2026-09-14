@@ -104,6 +104,7 @@ export function groupingFullLabel(groups) {
     return `${g.units > 1 ? g.units : ''}[${g.div}:${slotsStr}]`;
   }).join('+');
 }
+
 // Shortest tick the scheduler will act on. The scheduler fills a lookahead
 // window by advancing a clock by one tick duration at a time, so a duration of
 // zero never advances it and a negative one walks it backwards — either way
@@ -124,7 +125,8 @@ export function groupingFullLabel(groups) {
 // their place: the negated form catches NaN and undefined, which would slip
 // past a plain `<`, and the finite check catches Infinity, which a tempoScale
 // of 0 produces and which clears any lower bound while leaving the clock just
-// as dead.export const MIN_TICK_SEC = 0.0005;
+// as dead.
+export const MIN_TICK_SEC = 0.0005;
 export function oneDenomUnitSec(mState, tempoScale) {
   const { tempoBPM, tempoDenom, tempoDotted, denominator } = mState;
   const dotFactor = tempoDotted ? 1.5 : 1;
