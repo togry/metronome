@@ -476,7 +476,55 @@
 </div>
 
 <script type="module">
-import { GoogleGenAI } from 'https://esm.run/@google/genai';
+// No imports. This page previously pulled @google/genai from esm.run at
+// runtime, an unpinned, unversioned third-party script with full access to a
+// page that holds the user's Google API key and their uploaded score — and it
+// was doing so to wrap a single HTTP POST. Whoever controlled that CDN
+// response controlled the key. The one call it made is written out below
+// against the REST endpoint instead, which removes the dependency entirely and
+// leaves the page self-contained.
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_URL   =
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+// One POST, replacing ai.models.generateContent(). The key travels in a header
+// rather than the ?key= query parameter the REST docs lead with: query strings
+// end up in proxy logs, browser history and Referer headers, and this is a
+// credential.
+async function generateContent({ apiKey, pdfBase64, userText, systemPrompt }) {
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [
+          { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },
+          { text: userText },
+        ],
+      }],
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      generationConfig: { maxOutputTokens: 4000, temperature: 0.1 },
+    }),
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    // Keep the status in the message: the catch below reads it to tell a bad
+    // key apart from everything else.
+    const detail = data?.error?.message || res.statusText || 'request failed';
+    throw new Error(`${res.status} ${detail}`);
+  }
+
+  const blocked = data?.promptFeedback?.blockReason;
+  if (blocked) throw new Error(`Gemini declined this score (${blocked})`);
+
+  // The SDK's response.text concatenated every text part; do the same.
+  return (data?.candidates?.[0]?.content?.parts ?? [])
+    .map(p => p.text ?? '')
+    .join('');
+}
 
 const PROMPT = `You are a specialist in music notation and score analysis. The user has uploaded a PDF of sheet music. Your task is to extract all tempo and time signature changes and output them in the exact Conductor score format described below.
 
@@ -575,27 +623,14 @@ async function generate() {
     : 'Please extract the Conductor timesheet from this score.';
 
   try {
-    const ai = new GoogleGenAI({ apiKey: key });
-
     statusText.textContent = 'Analysing notation and extracting tempo map…';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: [{
-        role: 'user',
-        parts: [
-          { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
-          { text: userText }
-        ]
-      }],
-      config: {
-        systemInstruction: PROMPT,
-        maxOutputTokens: 4000,
-        temperature: 0.1
-      }
-    });
-
-    let text = response.text?.trim() ?? '';
+    let text = (await generateContent({
+      apiKey:       key,
+      pdfBase64,
+      userText,
+      systemPrompt: PROMPT,
+    })).trim();
 
     // Strip any accidental markdown fences
     text = text.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/,'').trim();
