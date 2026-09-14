@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <!-- Background -->
+  <rect width="180" height="180" rx="36" fill="#0a0a14"/>
+  <!-- Quarter note stem + head -->
+  <ellipse cx="74" cy="118" rx="14" ry="10" transform="rotate(-15 74 118)" fill="#e8c84a"/>
+  <line x1="87" y1="112" x2="87" y2="52" stroke="#e8c84a" stroke-width="5" stroke-linecap="round"/>
+  <!-- Flag -->
+  <path d="M87 52 Q118 62 110 82" stroke="#e8c84a" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- Beat dots (measure flash indicators) -->
+  <circle cx="116" cy="108" r="7" fill="#ff3333"/>
+  <circle cx="136" cy="108" r="5" fill="#ffaa00"/>
+  <circle cx="152" cy="108" r="5" fill="#00ccff"/>
+</svg>
