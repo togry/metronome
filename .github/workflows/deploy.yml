@@ -54,7 +54,18 @@ jobs:
       - run: npm run build
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        # Pinned to a commit, not the @v4 tag. This is third-party code that
+        # runs with GITHUB_TOKEN and contents:write — push access to gh-pages,
+        # which is the JavaScript every visitor of the site executes. A major
+        # version tag is mutable: the author repoints it at each release, so
+        # @v4 is a promise about semantics, not about the code that will run.
+        # Anyone able to move that tag, or to push to the repo behind it, would
+        # otherwise be running arbitrary code in this job.
+        #
+        # The trade is that security fixes no longer arrive on their own. Bump
+        # it deliberately — `git ls-remote --tags` on the repo shows where the
+        # tag points now, and Dependabot can raise the PR if configured.
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
